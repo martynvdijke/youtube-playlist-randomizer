@@ -1,0 +1,14 @@
+[build-system]
+requires = ["flit_core >=2,<4"]
+build-backend = "flit_core.buildapi"
+
+[tool.flit.metadata]
+module = "youtube_playlist_randomizer"
+author = "Martyn van Dijke"
+author-email = "martijnvdijke600@gmail.com"
+home-page = "https://github.com/martynvdijke/youtube-playlist-randomizer"
+classifiers = [ "License :: OSI Approved :: MIT License",]
+description-file = "README.md"
+
+[tool.flit.scripts]
+youtube_playlist_randomizer = "youtube_playlist_randomizer:main"
