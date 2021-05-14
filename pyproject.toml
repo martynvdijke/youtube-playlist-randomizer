@@ -7,6 +7,14 @@ module = "youtube_playlist_randomizer"
 author = "Martyn van Dijke"
 author-email = "martijnvdijke600@gmail.com"
 home-page = "https://github.com/martynvdijke/youtube-playlist-randomizer"
+requires=[
+    "flit_core>=2.2.0",
+    "coloredlogs",
+    "google_auth_oauthlib",
+    "google-api-python-client",
+    "prompt_toolkit"
+]
+requires-python=">=3.5"
 classifiers = [ "License :: OSI Approved :: MIT License",]
 description-file = "README.md"
 
