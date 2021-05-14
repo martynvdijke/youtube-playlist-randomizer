@@ -4,12 +4,17 @@ Main module for
 import argparse
 import logging
 import sys
-from . import  __version__
+import pathlib
+import coloredlogs
+from . import __version__
+from . import auth
+from . import playlist
 
 __author__ = "Martyn van Dijke"
 __copyright__ = "Martyn van Dijke"
 __license__ = "MIT"
 _logger = logging.getLogger(__name__)
+
 
 def parse_args(args):
     """
@@ -43,7 +48,14 @@ def parse_args(args):
         const=logging.DEBUG,
     )
 
-    parser.add_argument("config", metavar="FILE", nargs="+", help="Input config file")
+    parser.add_argument(
+        "-i",
+        "--input",
+        default="client_secret.json",
+        type=pathlib.Path,
+        help="Specify the secret client json file [default=%(default)r]",
+        required=True,
+    )
     return parser.parse_args(args)
 
 
@@ -59,6 +71,9 @@ def setup_logging(loglevel):
         format=logformat,
         datefmt="%Y-%m-%d %H:%M:%S",
     )
+    # setup colred logs
+    coloredlogs.install(level=loglevel, logger=_logger)
+
 
 def main(args):
     """
@@ -70,10 +85,13 @@ def main(args):
     """
     args = parse_args(args)
     setup_logging(args.loglevel)
+    youtube = auth.auth(args)
+    playlist.PlayListRandomizer(youtube)
 
-# if __name__ == "__main__":
-#     # ^  This is a guard statement that will prevent the following code from
-#     #    being executed in the case someone imports this file instead of
-#     #    executing it as a script.
-#     #    https://docs.python.org/3/library/__main__.html
-#     main(sys.argv[1:])
+
+if __name__ == "__main__":
+    # ^  This is a guard statement that will prevent the following code from
+    #    being executed in the case someone imports this file instead of
+    #    executing it as a script.
+    #    https://docs.python.org/3/library/__main__.html
+    main(sys.argv[1:])
