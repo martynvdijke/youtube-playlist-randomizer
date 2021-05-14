@@ -1,6 +1,8 @@
 *.json
 venvyoutube/*
 dist/*
+dist/*
+*.tar.gz
 test.py
 .tox/*
 .installed.cfg
@@ -15,3 +17,4 @@ lib
 lib64
 *.pyc
 *.pyo
+youtube_playlist_randomizer/__pycache_/*
