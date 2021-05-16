@@ -4,6 +4,8 @@ File where all the magic happens
 
 import logging
 import random
+from collections import defaultdict
+
 from googleapiclient.errors import HttpError
 from prompt_toolkit import prompt
 from prompt_toolkit.completion import WordCompleter
@@ -46,30 +48,30 @@ class PlayListRandomizer:
         for item in response["items"]:
             title_list.append(item["snippet"]["localized"]["title"])
             id_list.append(item["id"])
+        try:
+            # loop over all pages containing results
+            next_page = response["nextPageToken"]
+            # get the info to loop over all playlist
+            total_items = response["pageInfo"]["totalResults"]
+            results_per_page = response["pageInfo"]["resultsPerPage"]
+            current_items = current_items + results_per_page
+            for i in range(current_items, total_items, results_per_page):
+                _logger.debug("Loop %d", i)
+                request = self.youtube.playlistItems().list(
+                    part="snippet", mine=True, pageToken=next_page
+                )
+                response = request.execute()
 
-        # get the info to loop over all playlist
-        total_items = response["pageInfo"]["totalResults"]
-        results_per_page = response["pageInfo"]["resultsPerPage"]
-        current_items = current_items + results_per_page
-        next_page = response["nextPageToken"]
-
-        # loop over all pages containing results
-        for i in range(current_items, total_items, results_per_page):
-            _logger.debug("Loop %d", i)
-            request = self.youtube.playlistItems().list(
-                part="snippet", mine=True, pageToken=next_page
-            )
-            response = request.execute()
-
-            for item in response["items"]:
-                title_list.append(item["snippet"]["localized"]["title"])
-                id_list.append(item["id"])
-            try:
-                next_page = response["nextPageToken"]
-            except HttpError:
-                _logger.debug("Reached end of the playlists ")
-                break
-
+                for item in response["items"]:
+                    title_list.append(item["snippet"]["localized"]["title"])
+                    id_list.append(item["id"])
+                try:
+                    next_page = response["nextPageToken"]
+                except HttpError:
+                    _logger.debug("Reached end of the playlists ")
+                    break
+        except Exception:
+            _logger.warning("No nextPageToken found")
         _logger.debug("Number of items in video list %d", len(title_list))
         self.choose_playlist(title_list, id_list)
 
@@ -126,12 +128,14 @@ class PlayListRandomizer:
 
             try:
                 next_page = response["nextPageToken"]
-            except HttpError:
+            except Exception:
                 _logger.debug("Reached end of the playlist")
                 break
         _logger.debug("Number of items in video list %d", len(videoid_list))
         # populate the new playlist with all the video_id's
         self.populate_new_playlist(videoid_list)
+
+
 
     def populate_new_playlist(self, videoid_list):
         """
@@ -142,30 +146,43 @@ class PlayListRandomizer:
         # shuffles playlist
         random.shuffle(videoid_list)
 
-        body = {}
+        def insert_items_in_playlist(request_id, response, exception):
+            if exception is not None:
+                # Do something with the exception
+                pass
+            else:
+                # Do something with the response
+                pass
+
+        batch = self.youtube.new_batch_http_request(callback=insert_items_in_playlist)
+
         # loop over all values and add them to the request
         for i in range(0, len(videoid_list)):
-            entry = {
-                "snippet": {
+            entry = {"snippet": {
                     "playlistId": self.new_playlist_id,
                     "position": i,
                     "resourceId": {"kind": "youtube#video", "videoId": videoid_list[i]},
                 }
             }
+            request = self.youtube.playlistItems().insert(part="snippet", body=entry)
+            batch.add(request)
 
-            body.update(entry)
 
-        # send the request
-        request = self.youtube.playlistItems().insert(part="snippet", body=body)
-        try:
-            response = request.execute()
-            _logger.debug(response)
-        except HttpError as error:
-            _logger.warning(
-                "Error in populating new playlist status code: %s details: %s",
-                error.status_code,
-                error.error_details,
-            )
+                # json.dump(entry, outfile)
+
+        batch.execute()
+
+        # # send the request
+        # request = self.youtube.playlistItems().insert(part="snippet", body=body)
+        # try:
+        #     response = request.execute()
+        #     _logger.debug(response)
+        # except HttpError as error:
+        #     _logger.warning(
+        #         "Error in populating new playlist status code: %s details: %s",
+        #         error.status_code,
+        #         error.error_details,
+        #     )
 
     def choose_playlist(self, title_list, id_list):
         """
