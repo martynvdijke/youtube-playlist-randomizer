@@ -2,7 +2,7 @@
 Simple python cli script to shuffle an input list and save the playlist
 """
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 
 """
 Main module for
@@ -53,6 +53,13 @@ def parse_args(args):
         action="store_const",
         const=logging.DEBUG,
     )
+    
+    parser.add_argument(
+        "-n",
+        "--update_request",
+        default=190,
+        help="Specify the number of update request to do per 24 hours [default=%(default)r]",
+    )
 
     parser.add_argument(
         "-i",
@@ -89,40 +96,8 @@ def main(argv=None):
     Returns:
         none
     """
-    parser = argparse.ArgumentParser(description="Playlist randomizer")
-    parser.add_argument(
-        "--version",
-        action="version",
-        version=f"randomizer version: {__version__}",
-    )
-
-    # set logging level
-    parser.add_argument(
-        "-v",
-        "--verbose",
-        dest="loglevel",
-        help="set loglevel to INFO",
-        action="store_const",
-        const=logging.INFO,
-    )
-    parser.add_argument(
-        "-vv",
-        "--very-verbose",
-        dest="loglevel",
-        help="set loglevel to DEBUG",
-        action="store_const",
-        const=logging.DEBUG,
-    )
-
-    parser.add_argument(
-        "-i",
-        "--input",
-        default="client_secret.json",
-        type=pathlib.Path,
-        help="Specify the secret client json file [default=%(default)r]",
-        required=True,
-    )
-    args = parser.parse_args(argv)
+    args = parse_args(argv)
     setup_logging(args.loglevel)
     youtube = auth.auth(args)
-    playlist.PlayListRandomizer(youtube)
+    playlist.PlayListRandomizer(youtube, args)
+    sys.exit("Done shuffling playlist, thank for using")

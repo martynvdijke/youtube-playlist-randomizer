@@ -4,6 +4,7 @@ File where all the magic happens
 
 import logging
 import random
+import time
 from collections import defaultdict
 
 from googleapiclient.errors import HttpError
@@ -20,14 +21,15 @@ class PlayListRandomizer:
     Main playlist randomizer class to easily hold all data required
     """
 
-    def __init__(self, youtube):
+    def __init__(self, youtube, args):
         """
-
+        Initiliszes playlist randonmizer
         :param youtube: authorized youtube entity
         """
         self.youtube = youtube
         self.playlist_id = None
         self.new_playlist_id = None
+        self.n = args.update_request
         # get the users playlist and fires the main scripts
         self.get_playlists()
 
@@ -111,16 +113,24 @@ class PlayListRandomizer:
         total_items = response["pageInfo"]["totalResults"]
         results_per_page = response["pageInfo"]["resultsPerPage"]
         current_items = current_items + results_per_page
-        next_page = response["nextPageToken"]
+        try:
+            next_page = response["nextPageToken"]
+        except Exception:
+            _logger.debug("No next page token")
 
         for item in response["items"]:
             videoid_list.append(item["snippet"]["resourceId"]["videoId"])
 
         for i in range(current_items, total_items, results_per_page):
             _logger.debug("Loop %d", i)
-            request = self.youtube.playlistItems().list(
-                part="snippet", pageToken=next_page, playlistId=self.playlist_id
-            )
+            if next_page is not None:
+                request = self.youtube.playlistItems().list(
+                    part="snippet", pageToken=next_page, playlistId=self.playlist_id
+                )
+            else:
+                request = self.youtube.playlistItems().list(
+                    part="snippet", playlistId=self.playlist_id
+                )
             response = request.execute()
 
             for item in response["items"]:
@@ -146,43 +156,36 @@ class PlayListRandomizer:
         # shuffles playlist
         random.shuffle(videoid_list)
 
-        def insert_items_in_playlist(request_id, response, exception):
-            if exception is not None:
-                # Do something with the exception
-                pass
-            else:
-                # Do something with the response
-                pass
-
-        batch = self.youtube.new_batch_http_request(callback=insert_items_in_playlist)
-
+        body = {}
         # loop over all values and add them to the request
         for i in range(0, len(videoid_list)):
-            entry = {"snippet": {
+            entry = {
+                "snippet": {
                     "playlistId": self.new_playlist_id,
                     "position": i,
                     "resourceId": {"kind": "youtube#video", "videoId": videoid_list[i]},
                 }
             }
-            request = self.youtube.playlistItems().insert(part="snippet", body=entry)
-            batch.add(request)
 
+            body.update(entry)
 
-                # json.dump(entry, outfile)
+            # send the request
+            request = self.youtube.playlistItems().insert(part="snippet", body=body)
+            try:
+                response = request.execute()
+                _logger.debug(response)
+            except HttpError as error:
+                _logger.warning(
+                    "Error in populating new playlist status code: %s details: %s",
+                    error.status_code,
+                    error.error_details,
+                )
+            #limit request/s somewhat
+            time.sleep(0.1)
 
-        batch.execute()
-
-        # # send the request
-        # request = self.youtube.playlistItems().insert(part="snippet", body=body)
-        # try:
-        #     response = request.execute()
-        #     _logger.debug(response)
-        # except HttpError as error:
-        #     _logger.warning(
-        #         "Error in populating new playlist status code: %s details: %s",
-        #         error.status_code,
-        #         error.error_details,
-        #     )
+            if i == self.n:
+                #sleep for 25 hours, youtube playlist inserts are limited in requests/day
+                time.sleep(90000)
 
     def choose_playlist(self, title_list, id_list):
         """

@@ -18,10 +18,11 @@ pip install youtube-playlist-randomizer
 ```python
   -h, --help            show this help message and exit
   --version             show programs version number and exit
+  -n                    specify the amount of inserts to execute
   -v, --verbose         set loglevel to INFO
   -vv, --very-verbose   set loglevel to DEBUG
   -i INPUT, --input INPUT
-                        Specify the secret client json file default='client_secret.json'
+                        specify the secret client json file default='client_secret.json'
 ```
 ### Config
 This scripts needs a client_secret.json file you can get one by going to 
