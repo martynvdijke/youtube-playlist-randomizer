@@ -1,22 +1,30 @@
+[tool.poetry]
+name = "youtube-playlist-randomizer"
+version = "0.3.0"
+description = "A tool to randomize youtube playlists"
+authors = ["Martyn van Dijke <martijnvdijke600@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+packages = [{include = "youtube_playlist_randomizer"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+google-api-python-client = "^2.90.0"
+prompt-toolkit2 = "^2.0.11"
+google-auth-oauthlib = "^1.0.0"
+prompt-toolkit = "^3.0.38"
+
+
+[tool.poetry.group.dev.dependencies]
+pylint = "^2.17.4"
+black = "^23.3.0"
+mypy = "^1.4.0"
+pytest = "^7.3.2"
+flake8 = "^6.0.0"
+
 [build-system]
-requires = ["flit_core >=2,<4"]
-build-backend = "flit_core.buildapi"
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
 
-[tool.flit.metadata]
-module = "youtube_playlist_randomizer"
-author = "Martyn van Dijke"
-author-email = "martijnvdijke600@gmail.com"
-home-page = "https://github.com/martynvdijke/youtube-playlist-randomizer"
-requires=[
-    "flit_core>=2.2.0",
-    "coloredlogs",
-    "google_auth_oauthlib",
-    "google-api-python-client",
-    "prompt_toolkit"
-]
-requires-python=">=3.5"
-classifiers = [ "License :: OSI Approved :: MIT License",]
-description-file = "README.md"
-
-[tool.flit.scripts]
-youtube_playlist_randomizer = "youtube_playlist_randomizer:main"
+[tool.poetry.scripts]
+youtube_playlist_randomizer = 'youtube_playlist_randomizer.main:main'

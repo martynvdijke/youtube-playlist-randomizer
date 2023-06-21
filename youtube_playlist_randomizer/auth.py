@@ -1,5 +1,5 @@
 """
-Authenticate teh user for youtube client
+Authenticate the users to youtube.
 """
 
 import os
