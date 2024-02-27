@@ -58,3 +58,4 @@ urllib3==1.26.17
 virtualenv==20.4.6
 wcwidth==0.2.5
 wrapt==1.12.1
+setuptools>=65.5.1 # not directly required, pinned by Snyk to avoid a vulnerability
