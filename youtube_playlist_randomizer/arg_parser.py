@@ -7,10 +7,8 @@ import pathlib
 import sys
 
 
-def parse_args(args):
+def parse_args():
     """
-    Args:
-        args: cli arguments given to script
     Returns:
         list of supported arguments
     """
@@ -41,7 +39,8 @@ def parse_args(args):
     
     parser.add_argument(
         "-n",
-        "--update_request",
+        "--number_of",
+        dest="chunks",
         default=190,
         help="Specify the number of update request to do per 24 hours [default=%(default)r]",
     )
@@ -50,11 +49,12 @@ def parse_args(args):
         "-i",
         "--input",
         default="client_secret.json",
+        dest="input",
         type=pathlib.Path,
         help="Specify the secret client json file [default=%(default)r]",
-        required=True,
+        required=False,
     )
-    return parser.parse_args(args)
+    return parser.parse_args()
 
 
 def setup_logging(loglevel):
@@ -69,6 +69,4 @@ def setup_logging(loglevel):
         format=logformat,
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-    # setup colred logs
-    # coloredlogs.install(level=loglevel, logger=_logger)
 

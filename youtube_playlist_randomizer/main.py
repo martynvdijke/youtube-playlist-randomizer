@@ -1,10 +1,10 @@
-
 from youtube_playlist_randomizer import auth, arg_parser
 from youtube_playlist_randomizer.randomizer import Randomizer
-import types
+
 
 def main():
-    args = types.SimpleNamespace()
-    args.input= "client_secret.json"
-    youtube = auth.auth(args)
-    tes = Randomizer(youtube, args)
+    args = arg_parser.parse_args()
+    file = args.input
+    youtube = auth.auth(file)
+    randomizer = Randomizer(youtube, args)
+    randomizer.run()
