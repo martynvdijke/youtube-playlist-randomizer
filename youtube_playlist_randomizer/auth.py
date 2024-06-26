@@ -1,5 +1,5 @@
 """
-Authenticate teh user for youtube client
+Authenticate the users to youtube.
 """
 
 import os
@@ -11,7 +11,7 @@ import googleapiclient.errors
 scopes = ["https://www.googleapis.com/auth/youtube.force-ssl"]
 
 
-def auth(args):
+def auth(file):
     """
     Autehnticates the user to acces the users youtube content
     :param args: sys arguments
@@ -23,14 +23,12 @@ def auth(args):
 
     api_service_name = "youtube"
     api_version = "v3"
-    client_secrets_file = args.input
+    client_secrets_file = file
 
     # Get credentials and create an API client
     flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file(
-        client_secrets_file, scopes
-    )
-    credentials = flow.run_console()
+        client_secrets_file, scopes)
+    credentials = flow.run_local_server()
     youtube = googleapiclient.discovery.build(
-        api_service_name, api_version, credentials=credentials
-    )
+        api_service_name, api_version, credentials=credentials)
     return youtube
