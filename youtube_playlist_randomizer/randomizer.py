@@ -159,7 +159,7 @@ class Randomizer:
         self, playlist: Playlist, response: dict
     ) -> Optional[str]:
         """
-        Converst the raw api output to Playlist format
+        Converts the raw api output to Playlist format
 
         Args:
             playlist (Playlist): Playlist object
@@ -226,15 +226,19 @@ class Randomizer:
             try:
                 response = request.execute()
                 _logger.debug(response)
+                
             except HttpError as error:
+                if error.status_code == 404:
+                    logging.warning(f"Could not find {item}")
+                    continue
                 _logger.warning(
-                    "Error in populating new playlist status code: %s details: %s",
-                    error.status_code,
-                    error.error_details,
+                    f"Error in populating new playlist status code: {error.status_code,}. {error.error_details,}, video {item.videoId}",
                 )
-            i += 1
-            # limit request/s somewhat
-            time.sleep(0.1)
+                continue
+            else:
+                i += 1
+                # limit request/s somewhat
+                time.sleep(0.01)
 
             if i == self.chunks:
                 # sleep for 25 hours, youtube playlist inserts are limited in requests/day
