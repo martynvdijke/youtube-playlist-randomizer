@@ -13,7 +13,7 @@ scopes = ["https://www.googleapis.com/auth/youtube.force-ssl"]
 
 def auth(file):
     """
-    Autehnticates the user to acces the users youtube content
+    Authenticates the user to access the users youtube content
     :param args: sys arguments
     :return: youtube api client
     """

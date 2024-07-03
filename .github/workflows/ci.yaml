@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Poetry
+        run: pip install poetry
+
+      - name: Configure Poetry to use the same Python version as setup-python
+        run: poetry env use $(python -c "import sys; print(sys.executable)")
+
+      - name: Install dependencies
+        run: poetry install
+
+      - name: Run ruff
+        run: poetry run ruff .
+
+      - name: Run tests
+        run: poetry run pytest

@@ -18,3 +18,4 @@ lib64
 *.pyc
 *.pyo
 youtube_playlist_randomizer/__pycache_/*
+poetry.lock
