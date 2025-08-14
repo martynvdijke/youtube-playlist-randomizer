@@ -2,6 +2,7 @@
 File where all the magic happens
 """
 
+import datetime
 import logging
 import random
 import time
@@ -58,20 +59,35 @@ class Randomizer:
 
     def _get_playlists(self) -> dict:
         """
-        Gets the playlists
+        Gets all playlists with pagination
 
         Returns:
-            dict: API response
+            dict: API response with all items
         """
-        request = self.youtube.playlists().list(part="snippet", mine=True)
-        response = request.execute()
-        return response
+        all_items = []
+        next_page_token = None
 
-    def create_youtube_playlist(self, title):
+        while True:
+            request = self.youtube.playlists().list(
+                part="snippet", mine=True, pageToken=next_page_token
+            )
+            response = request.execute()
+            all_items.extend(response.get("items", []))
+            next_page_token = response.get("nextPageToken")
+            if not next_page_token:
+                break
+
+        return {"items": all_items}
+
+    def create_youtube_playlist(self, title: str) -> int:
         """
-        Makes a new playlis to hold the randomized videos
-        :param title:
-        :return:
+        Creates a new youtube playlist with the given title.
+
+        Args:
+            title (str): Title to give.
+
+        Returns:
+            int: Return id
         """
         request = self.youtube.playlists().insert(
             part="snippet,status", body={"snippet": {"title": title}}
@@ -86,14 +102,24 @@ class Randomizer:
                 error.status_code,
                 error.error_details,
             )
-
-    def randomize_playlist(self, playlist: Playlist):
         """
         Randomizes the given playlists
 
         Args:
             playlist (Playlist): Playlist object
         """
+
+    def randomize_playlist(self, playlist: Playlist) -> Playlist:
+        """
+        Randomizes the given playlists
+
+        Args:
+            playlist (Playlist): Playlist object
+
+        Returns:
+            Playlist: Randomized playlist object
+        """
+
         current_items = 0
         current_items, total_results, next_page = self.initial_list_playlist_items(
             playlist, current_items
@@ -226,13 +252,13 @@ class Randomizer:
             try:
                 response = request.execute()
                 _logger.debug(response)
-                
+
             except HttpError as error:
                 if error.status_code == 404:
                     logging.warning(f"Could not find {item}")
                     continue
                 _logger.warning(
-                    f"Error in populating new playlist status code: {error.status_code,}. {error.error_details,}, video {item.videoId}",
+                    f"Error in populating new playlist status code: {(error.status_code,)}. {(error.error_details,)}, video {item.videoId}",
                 )
                 continue
             else:
@@ -267,9 +293,11 @@ class Randomizer:
         Args:
             title (str): Title to use
         """
-        playlist_title = prompt(
-            "Youtube playlist to use ", default="{}-randomized".format(title)
-        )
+        now = datetime.datetime.now()
+        month_year = now.strftime("%B-%Y")
+        default_title = f"{title}-randomized-{month_year}"
+
+        playlist_title = prompt("Youtube playlist to use ", default=default_title)
 
         playlist_id = self.create_youtube_playlist(playlist_title)
         new_playlist = Playlist(playlist_id, playlist_title)

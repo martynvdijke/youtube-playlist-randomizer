@@ -1,5 +1,3 @@
-
-
 from youtube_playlist_randomizer import __version__
 import argparse
 import logging
@@ -36,7 +34,7 @@ def parse_args():
         action="store_const",
         const=logging.DEBUG,
     )
-    
+
     parser.add_argument(
         "-n",
         "--number_of",
@@ -69,4 +67,3 @@ def setup_logging(loglevel):
         format=logformat,
         datefmt="%Y-%m-%d %H:%M:%S",
     )
-

@@ -6,7 +6,8 @@ import os
 
 import google_auth_oauthlib.flow
 import googleapiclient.discovery
-import googleapiclient.errors
+from google_auth_oauthlib.flow import InstalledAppFlow
+
 
 scopes = ["https://www.googleapis.com/auth/youtube.force-ssl"]
 
@@ -26,9 +27,13 @@ def auth(file):
     client_secrets_file = file
 
     # Get credentials and create an API client
-    flow = google_auth_oauthlib.flow.InstalledAppFlow.from_client_secrets_file(
-        client_secrets_file, scopes)
-    credentials = flow.run_local_server()
+    flow = InstalledAppFlow.from_client_secrets_file(client_secrets_file, scopes)
+    try:
+        credentials = flow.run_local_server()
+    except google_auth_oauthlib.flow.InstalledAppFlowError as e:
+        print(f"Error during authentication: {e}, trying console flow.")
+        credentials = flow.run_console()
     youtube = googleapiclient.discovery.build(
-        api_service_name, api_version, credentials=credentials)
+        api_service_name, api_version, credentials=credentials
+    )
     return youtube
