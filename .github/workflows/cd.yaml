@@ -41,7 +41,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Build and publish to pypi
+        uses: JRubics/poetry-publish@v2.1
+        with:
+          pypi_token: ${{ secrets.PYPI_TOKEN }}
+
       - name: Publish to PyPI
         env:
-          POETRY_PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
-        run: poetry publish --build --username __token__ --password $POETRY_PYPI_TOKEN
+          PYPI_TOKEN: ${{ secrets.PYPI_TOKEN }}
+        run: poetry publish --build --username __token__ --password $PYPI_TOKEN
