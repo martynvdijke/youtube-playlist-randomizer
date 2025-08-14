@@ -1,3 +1,10 @@
+## [0.5.1](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v0.5.0...v0.5.1) (2025-08-14)
+
+
+### Bug Fixes
+
+* remove dupl icate push, fix formatting issues ([be11f63](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/be11f632e9021917e6f7115f009db6d276c4d885))
+
 # [0.5.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v0.4.0...v0.5.0) (2025-08-14)
 
 
