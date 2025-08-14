@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "youtube-playlist-randomizer"
-version = 0.5.0
+version = "0.4.2"
 description = "A tool to randomize youtube playlists"
 authors = ["Martyn van Dijke <martijnvdijke600@gmail.com>"]
 license = "MIT"
@@ -21,6 +21,7 @@ mypy = "^1.17.1"
 pytest = "^7.4.4"
 poetry = "^1.8.5"
 ruff = "^0.12.8"
+ty = "^0.0.1a18"
 
 [build-system]
 requires = ["poetry-core"]
