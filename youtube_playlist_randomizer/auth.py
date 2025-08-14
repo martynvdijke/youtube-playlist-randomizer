@@ -32,7 +32,7 @@ def auth(file):
         credentials = flow.run_local_server()
     except google_auth_oauthlib.flow.InstalledAppFlowError as e:
         print(f"Error during authentication: {e}, trying console flow.")
-        credentials = flow.run_console()
+        credentials = flow.run_local_server(port=0)
     youtube = googleapiclient.discovery.build(
         api_service_name, api_version, credentials=credentials
     )
