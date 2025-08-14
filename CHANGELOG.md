@@ -1,3 +1,10 @@
+## [0.5.2](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v0.5.1...v0.5.2) (2025-08-14)
+
+
+### Bug Fixes
+
+* run on port 0 if browser does not work ([e061348](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/e06134842509bb90ffd53be774047be563d0ff3d))
+
 ## [0.5.1](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v0.5.0...v0.5.1) (2025-08-14)
 
 
