@@ -7,7 +7,7 @@
 
 ## Summary
 
-Since the Chromecast can not shuffle an youtube list, and I sometimes want to just lay back and watch my favourite playlist in random order i came up with this pacakge.
+Since the Chromecast can not shuffle an youtube list, and I sometimes want to just lay back and watch my favourite playlist in random order i came up with this package.
 This is a simple python package that takes a youtube playlist as input randomizes it and saves the youtube playlist.
 
 ## Installation

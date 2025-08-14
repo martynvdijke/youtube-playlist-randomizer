@@ -1,11 +1,12 @@
-
 from youtube_playlist_randomizer.playlistitem import PlayListItem
+
+
 class Playlist:
     """
     Playlist DTO
     """
-    
-    def __init__(self, id:str, title:str):
+
+    def __init__(self, id: str, title: str):
         """
         PLaylist object
 
@@ -16,7 +17,7 @@ class Playlist:
         self.id = id
         self.title = title
         self.items = []
-    
+
     def add_item(self, item: PlayListItem) -> None:
         """
         Adds a playlist item to the playlist

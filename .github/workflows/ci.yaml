@@ -35,7 +35,7 @@ jobs:
         run: poetry install
 
       - name: Run ruff
-        run: poetry run ruff .
+        run: poetry run ruff check .
 
       - name: Run tests
         run: poetry run pytest
