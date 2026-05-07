@@ -1,0 +1,143 @@
+{{template "base.html" .}}
+{{define "content"}}
+<div class="container">
+    <h2>Your Playlists</h2>
+    <p class="subtitle">Remaining daily quota: <strong>{{remaining}}</strong> units</p>
+
+    {{if .playlists}}
+    <table class="playlist-table">
+        <thead>
+            <tr>
+                <th>Title</th>
+                <th>Videos</th>
+                <th>Est. Quota Cost</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+        {{range .playlists}}
+            <tr>
+                <td class="title-cell">{{.Title}}</td>
+                <td class="count-cell">{{.ItemCount}}</td>
+                <td class="cost-cell">{{estimateCost .ItemCount}} units</td>
+                <td>
+                    <button class="btn shuffle-btn"
+                            data-id="{{.ID}}"
+                            data-title="{{.Title}}"
+                            {{if gt (estimateCost .ItemCount) (remaining)}}disabled title="Insufficient quota"{{end}}>
+                        Shuffle
+                    </button>
+                </td>
+            </tr>
+        {{end}}
+        </tbody>
+    </table>
+    {{else}}
+    <div class="empty-state">
+        <p>No playlists found. Create a playlist on YouTube first.</p>
+    </div>
+    {{end}}
+
+    <div id="shuffle-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3 id="modal-title"></h3>
+            <div class="progress-container">
+                <div id="progress-bar" class="progress-bar"></div>
+            </div>
+            <p id="progress-text"></p>
+            <div id="modal-result" class="hidden"></div>
+            <button class="btn" onclick="closeModal()">Close</button>
+        </div>
+    </div>
+</div>
+
+<script>
+function estimateCost(count) {
+    // listPlaylistItems = ceil(count/50) * 1, insertPlaylist = 50, insertItems = count * 50
+    return Math.ceil(count / 50) * 1 + 50 + count * 50;
+}
+
+document.querySelectorAll('.shuffle-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+        if (btn.disabled) return;
+        btn.disabled = true;
+        btn.textContent = 'Starting...';
+
+        const id = btn.dataset.id;
+        const title = btn.dataset.title;
+
+        document.getElementById('modal-title').textContent = 'Shuffling: ' + title;
+        document.getElementById('progress-bar').style.width = '0%';
+        document.getElementById('progress-text').textContent = 'Starting...';
+        document.getElementById('modal-result').classList.add('hidden');
+        document.getElementById('shuffle-modal').classList.remove('hidden');
+
+        try {
+            const resp = await fetch('/playlist/' + encodeURIComponent(id) + '/shuffle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title: title })
+            });
+            const data = await resp.json();
+            if (data.error) {
+                document.getElementById('progress-text').textContent = 'Error: ' + data.error;
+                btn.disabled = false;
+                btn.textContent = 'Shuffle';
+                return;
+            }
+            pollJob(data.jobId);
+        } catch (err) {
+            document.getElementById('progress-text').textContent = 'Error: ' + err.message;
+            btn.disabled = false;
+            btn.textContent = 'Shuffle';
+        }
+    });
+});
+
+function pollJob(jobId) {
+    const interval = setInterval(async () => {
+        try {
+            const resp = await fetch('/shuffle/' + jobId + '/status');
+            const job = await resp.json();
+
+            document.getElementById('progress-bar').style.width = job.progress + '%';
+
+            switch (job.status) {
+                case 'fetching':
+                    document.getElementById('progress-text').textContent = 'Fetching playlist items...';
+                    break;
+                case 'creating':
+                    document.getElementById('progress-text').textContent = 'Creating randomized playlist...';
+                    break;
+                case 'inserting':
+                    document.getElementById('progress-text').textContent =
+                        'Inserting items: ' + job.done + ' / ' + job.total;
+                    break;
+                case 'done':
+                    clearInterval(interval);
+                    document.getElementById('progress-text').textContent =
+                        'Done! ' + job.total + ' videos randomized.';
+                    document.getElementById('modal-result').classList.remove('hidden');
+                    document.getElementById('modal-result').innerHTML =
+                        '<p>New playlist: <a href="https://www.youtube.com/playlist?list=' +
+                        job.newPlaylistID + '" target="_blank">' + job.newPlaylistTitle + '</a></p>';
+                    location.reload();
+                    break;
+                case 'error':
+                    clearInterval(interval);
+                    document.getElementById('progress-bar').style.background = '#ef4444';
+                    document.getElementById('progress-text').textContent = 'Error: ' + job.error;
+                    break;
+            }
+        } catch (err) {
+            clearInterval(interval);
+            document.getElementById('progress-text').textContent = 'Connection error: ' + err.message;
+        }
+    }, 1500);
+}
+
+function closeModal() {
+    document.getElementById('shuffle-modal').classList.add('hidden');
+}
+</script>
+{{end}}

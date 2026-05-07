@@ -1,0 +1,63 @@
+# ypr Taskfile
+# https://taskfile.dev
+
+version: "3"
+
+vars:
+  BINARY: ypr-server
+
+tasks:
+  build:
+    desc: Build the binary
+    cmds:
+      - go build -o {{.BINARY}} .
+
+  run:
+    desc: Build and run the server
+    deps: [build]
+    cmds:
+      - ./{{.BINARY}}
+
+  dev:
+    desc: Run with hot-reload (requires air)
+    cmds:
+      - air -c .air.toml
+
+  fmt:
+    desc: Format code
+    cmds:
+      - go fmt ./...
+
+  lint:
+    desc: Run static analysis
+    cmds:
+      - go vet ./...
+
+  tidy:
+    desc: Tidy modules + format
+    cmds:
+      - go fmt ./...
+      - go mod tidy
+
+  test:
+    desc: Run tests
+    cmds:
+      - go test -v ./...
+
+  docker:build:
+    desc: Build Docker image
+    cmds:
+      - docker build -t ypr .
+
+  prepush:
+    desc: Full CI pipeline
+    cmds:
+      - task: tidy
+      - task: lint
+      - task: build
+      - task: test
+
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - rm -f {{.BINARY}}

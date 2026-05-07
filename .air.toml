@@ -1,0 +1,10 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -o ./tmp/ypr-server ."
+  bin = "./tmp/ypr-server"
+  include_ext = ["go", "html", "css"]
+  exclude_dir = ["tmp", "data"]
+  delay = 500
+  stop_on_error = true

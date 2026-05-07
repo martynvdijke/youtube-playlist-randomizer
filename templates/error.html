@@ -1,0 +1,10 @@
+{{template "base.html" .}}
+{{define "content"}}
+<div class="container">
+    <div class="error-box">
+        <h2>Something went wrong</h2>
+        <p class="error-message">{{.error}}</p>
+        <a href="/" class="btn">Go back</a>
+    </div>
+</div>
+{{end}}
