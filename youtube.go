@@ -39,6 +39,13 @@ type ShuffleJob struct {
 	Error            string
 	QuotaUsed        int
 	QuotaEstimated   int
+	Cancel           chan struct{} `json:"-"`
+}
+
+type QuotaDay struct {
+	Date       string `json:"date"`
+	Used       int    `json:"used"`
+	DailyLimit int    `json:"dailyLimit"`
 }
 
 func getYouTubeService(ctx context.Context, token *oauth2.Token, ts oauth2.TokenSource) (*youtube.Service, error) {
@@ -48,6 +55,16 @@ func getYouTubeService(ctx context.Context, token *oauth2.Token, ts oauth2.Token
 
 func getTokenSource(ctx context.Context, token *oauth2.Token) oauth2.TokenSource {
 	return oauthConfig.TokenSource(ctx, token)
+}
+
+func checkAborted(job *ShuffleJob) bool {
+	select {
+	case <-job.Cancel:
+		job.Status = "cancelled"
+		return true
+	default:
+		return false
+	}
 }
 
 func fetchPlaylists(svc *youtube.Service) ([]PlaylistInfo, error) {
@@ -177,6 +194,9 @@ func estimateShuffleCost(itemCount int) int {
 }
 
 func runShuffleJob(job *ShuffleJob, svc *youtube.Service) {
+	if checkAborted(job) {
+		return
+	}
 	job.Status = "fetching"
 	log.Printf("shuffle job %s: fetching items from playlist %s", job.ID, job.PlaylistID)
 
@@ -185,6 +205,9 @@ func runShuffleJob(job *ShuffleJob, svc *youtube.Service) {
 		job.Status = "error"
 		job.Error = err.Error()
 		log.Printf("shuffle job %s: fetch error: %v", job.ID, err)
+		return
+	}
+	if checkAborted(job) {
 		return
 	}
 
@@ -217,6 +240,9 @@ func runShuffleJob(job *ShuffleJob, svc *youtube.Service) {
 	job.NewPlaylistTitle = fmt.Sprintf("%s-randomized-%s",
 		job.PlaylistTitle, now.Format("January-2006"))
 
+	if checkAborted(job) {
+		return
+	}
 	job.Status = "creating"
 	log.Printf("shuffle job %s: creating new playlist %q", job.ID, job.NewPlaylistTitle)
 	newID, err := createPlaylist(svc, job.NewPlaylistTitle)
@@ -228,10 +254,16 @@ func runShuffleJob(job *ShuffleJob, svc *youtube.Service) {
 	}
 	job.NewPlaylistID = newID
 
+	if checkAborted(job) {
+		return
+	}
 	job.Status = "inserting"
 	log.Printf("shuffle job %s: inserting %d items into %s", job.ID, job.Total, newID)
 
 	for i, item := range items {
+		if checkAborted(job) {
+			return
+		}
 		if remainingQuota() < quotaInsertPlaylistItem {
 			job.Status = "error"
 			job.Error = fmt.Sprintf(
@@ -252,7 +284,7 @@ func runShuffleJob(job *ShuffleJob, svc *youtube.Service) {
 
 		job.Done = i + 1
 		job.Progress = (job.Done * 100) / job.Total
-		time.Sleep(50 * time.Millisecond) // gentle rate limit between inserts
+		time.Sleep(50 * time.Millisecond)
 	}
 
 	job.Status = "done"

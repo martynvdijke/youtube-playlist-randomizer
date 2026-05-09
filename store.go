@@ -144,3 +144,26 @@ func setDailyLimit(limit int) {
 	val := fmt.Sprintf("%d", limit)
 	db.Exec("INSERT OR REPLACE INTO settings (key, value) VALUES ('daily_quota_limit', ?)", val)
 }
+
+func getQuotaHistory(days int) ([]QuotaDay, error) {
+	var history []QuotaDay
+	cutoff := time.Now().AddDate(0, 0, -days).Format("2006-01-02")
+
+	rows, err := db.Query(
+		"SELECT date, used, daily_limit FROM quota_usage WHERE date >= ? ORDER BY date DESC",
+		cutoff,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var d QuotaDay
+		if err := rows.Scan(&d.Date, &d.Used, &d.DailyLimit); err != nil {
+			return nil, err
+		}
+		history = append(history, d)
+	}
+	return history, rows.Err()
+}

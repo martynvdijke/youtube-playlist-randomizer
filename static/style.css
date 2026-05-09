@@ -145,6 +145,14 @@ h2 {
     cursor: not-allowed;
 }
 
+.btn-danger {
+    background: #555;
+}
+
+.btn-danger:hover {
+    background: #ef4444;
+}
+
 .modal {
     position: fixed;
     inset: 0;
@@ -208,6 +216,12 @@ h2 {
     display: none;
 }
 
+.modal-actions {
+    display: flex;
+    justify-content: center;
+    gap: 0.75rem;
+}
+
 .error-box {
     background: #1a1a1a;
     border: 1px solid #991b1b;
@@ -255,4 +269,41 @@ h2 {
     margin-bottom: 2rem;
     font-size: 0.95rem;
     line-height: 1.5;
+}
+
+.quota-history {
+    margin-top: 2rem;
+    background: #1a1a1a;
+    border-radius: 8px;
+    padding: 1rem;
+}
+
+.quota-history summary {
+    cursor: pointer;
+    color: #888;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.quota-table {
+    width: 100%;
+    margin-top: 1rem;
+    border-collapse: collapse;
+}
+
+.quota-table th {
+    text-align: left;
+    padding: 0.5rem;
+    color: #888;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    border-bottom: 1px solid #2a2a2a;
+}
+
+.quota-table td {
+    padding: 0.5rem;
+    color: #aaa;
+    font-size: 0.85rem;
+    border-bottom: 1px solid #1a1a1a;
 }

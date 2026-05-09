@@ -38,6 +38,32 @@
     </div>
     {{end}}
 
+    {{if .quotaHistory}}
+    <details class="quota-history">
+        <summary>Quota History (last 7 days)</summary>
+        <table class="quota-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Used</th>
+                    <th>Limit</th>
+                    <th>%</th>
+                </tr>
+            </thead>
+            <tbody>
+            {{range .quotaHistory}}
+                <tr>
+                    <td>{{.Date}}</td>
+                    <td>{{.Used}}</td>
+                    <td>{{.DailyLimit}}</td>
+                    <td>{{if gt .DailyLimit 0}}{{pct .Used .DailyLimit}}%{{else}}N/A{{end}}</td>
+                </tr>
+            {{end}}
+            </tbody>
+        </table>
+    </details>
+    {{end}}
+
     <div id="shuffle-modal" class="modal hidden">
         <div class="modal-content">
             <h3 id="modal-title"></h3>
@@ -46,16 +72,17 @@
             </div>
             <p id="progress-text"></p>
             <div id="modal-result" class="hidden"></div>
-            <button class="btn" onclick="closeModal()">Close</button>
+            <div class="modal-actions">
+                <button id="cancel-btn" class="btn btn-danger hidden" onclick="cancelJob()">Cancel</button>
+                <button class="btn" onclick="closeModal()">Close</button>
+            </div>
         </div>
     </div>
 </div>
 
 <script>
-function estimateCost(count) {
-    // listPlaylistItems = ceil(count/50) * 1, insertPlaylist = 50, insertItems = count * 50
-    return Math.ceil(count / 50) * 1 + 50 + count * 50;
-}
+let currentJobId = null;
+let pollInterval = null;
 
 document.querySelectorAll('.shuffle-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -68,8 +95,10 @@ document.querySelectorAll('.shuffle-btn').forEach(btn => {
 
         document.getElementById('modal-title').textContent = 'Shuffling: ' + title;
         document.getElementById('progress-bar').style.width = '0%';
+        document.getElementById('progress-bar').style.background = '#22c55e';
         document.getElementById('progress-text').textContent = 'Starting...';
         document.getElementById('modal-result').classList.add('hidden');
+        document.getElementById('cancel-btn').classList.add('hidden');
         document.getElementById('shuffle-modal').classList.remove('hidden');
 
         try {
@@ -85,6 +114,8 @@ document.querySelectorAll('.shuffle-btn').forEach(btn => {
                 btn.textContent = 'Shuffle';
                 return;
             }
+            currentJobId = data.jobId;
+            document.getElementById('cancel-btn').classList.remove('hidden');
             pollJob(data.jobId);
         } catch (err) {
             document.getElementById('progress-text').textContent = 'Error: ' + err.message;
@@ -95,7 +126,7 @@ document.querySelectorAll('.shuffle-btn').forEach(btn => {
 });
 
 function pollJob(jobId) {
-    const interval = setInterval(async () => {
+    pollInterval = setInterval(async () => {
         try {
             const resp = await fetch('/shuffle/' + jobId + '/status');
             const job = await resp.json();
@@ -103,6 +134,7 @@ function pollJob(jobId) {
             document.getElementById('progress-bar').style.width = job.progress + '%';
 
             switch (job.status) {
+                case 'pending':
                 case 'fetching':
                     document.getElementById('progress-text').textContent = 'Fetching playlist items...';
                     break;
@@ -113,8 +145,15 @@ function pollJob(jobId) {
                     document.getElementById('progress-text').textContent =
                         'Inserting items: ' + job.done + ' / ' + job.total;
                     break;
+                case 'cancelled':
+                    clearInterval(pollInterval);
+                    document.getElementById('progress-bar').style.background = '#eab308';
+                    document.getElementById('cancel-btn').classList.add('hidden');
+                    document.getElementById('progress-text').textContent = 'Cancelled by user.';
+                    break;
                 case 'done':
-                    clearInterval(interval);
+                    clearInterval(pollInterval);
+                    document.getElementById('cancel-btn').classList.add('hidden');
                     document.getElementById('progress-text').textContent =
                         'Done! ' + job.total + ' videos randomized.';
                     document.getElementById('modal-result').classList.remove('hidden');
@@ -124,19 +163,36 @@ function pollJob(jobId) {
                     location.reload();
                     break;
                 case 'error':
-                    clearInterval(interval);
+                    clearInterval(pollInterval);
+                    document.getElementById('cancel-btn').classList.add('hidden');
                     document.getElementById('progress-bar').style.background = '#ef4444';
                     document.getElementById('progress-text').textContent = 'Error: ' + job.error;
                     break;
             }
         } catch (err) {
-            clearInterval(interval);
+            clearInterval(pollInterval);
             document.getElementById('progress-text').textContent = 'Connection error: ' + err.message;
         }
     }, 1500);
 }
 
+async function cancelJob() {
+    if (!currentJobId) return;
+    document.getElementById('cancel-btn').disabled = true;
+    document.getElementById('cancel-btn').textContent = 'Cancelling...';
+    try {
+        await fetch('/shuffle/' + currentJobId, { method: 'DELETE' });
+    } catch (e) {
+        document.getElementById('progress-text').textContent = 'Cancel request sent.';
+    }
+}
+
 function closeModal() {
+    if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+    }
+    currentJobId = null;
     document.getElementById('shuffle-modal').classList.add('hidden');
 }
 </script>
