@@ -1,0 +1,36 @@
+name: Stale Branches
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Delete stale branches
+        run: |
+          STALE_DAYS=60
+          PROTECTED="main|master|go-version"
+          CUTOFF=$(date -d "-${STALE_DAYS} days" +%s)
+
+          git branch -r --format="%(refname:lstrip=3)" | grep -vE "^(${PROTECTED})$" | while read branch; do
+            LAST_COMMIT=$(git log origin/"$branch" -1 --format="%ct" 2>/dev/null)
+            if [ -z "$LAST_COMMIT" ]; then continue; fi
+
+            if [ "$LAST_COMMIT" -lt "$CUTOFF" ]; then
+              LAST_DATE=$(date -d @"$LAST_COMMIT" +%Y-%m-%d)
+              echo "Deleting stale branch: $branch (last commit: $LAST_DATE)"
+              gh api -X DELETE "repos/${{ github.repository }}/git/refs/heads/$branch" || true
+            fi
+          done
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
