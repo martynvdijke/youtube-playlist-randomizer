@@ -1,3 +1,16 @@
+# [1.1.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.0.0...v1.1.0) (2026-05-18)
+
+
+### Bug Fixes
+
+* e2e tests - remove hidden from playlists container, fix quota bar test ([eb8463c](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/eb8463ccf2083a6e03fb4dc7d63698d589c74e3b))
+
+
+### Features
+
+* add OpenTelemetry instrumentation with traces and metrics ([55bec30](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/55bec30dd3ee6c34f0fc28ea889760b9609f893b))
+* migrate CRUD scenes to htmx with server-rendered HTML fragments ([f611b9e](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/f611b9e2ed91cb2abf04f73d5140ca292d0fbba2))
+
 # [1.0.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v0.5.2...v1.0.0) (2026-05-18)
 
 
