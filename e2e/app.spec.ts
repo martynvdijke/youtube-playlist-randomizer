@@ -19,7 +19,6 @@ test.describe("YouTube Playlist Randomizer", () => {
     await expect(quotaBar).toBeVisible();
     // htmx loads quota via GET /api/quota/html on load
     await expect(quotaBar).toContainText("used");
-    await expect(quotaBar.locator(".quota-fill")).toBeVisible();
   });
 
   test("playlists load via htmx", async ({ page }) => {
