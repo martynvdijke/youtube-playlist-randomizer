@@ -21,6 +21,7 @@ header h1 {
   font-size: 20px;
   font-weight: 600;
   color: #ff4444;
+  margin-bottom: 10px;
 }
 
 main {
@@ -43,6 +44,53 @@ main {
   font-size: 14px;
 }
 
+/* Quota Bar */
+.quota-bar {
+  font-size: 12px;
+}
+
+.quota-label {
+  margin-bottom: 4px;
+}
+
+.quota-label span {
+  color: #aaa;
+}
+
+.quota-track {
+  height: 6px;
+  background: #333;
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.quota-fill {
+  height: 100%;
+  background: #4caf50;
+  border-radius: 3px;
+  transition: width 0.5s ease;
+}
+
+.quota-fill.quota-warning {
+  background: linear-gradient(90deg, #ffeb3b, #ff9800);
+}
+
+.quota-fill.quota-critical {
+  background: linear-gradient(90deg, #ff9800, #ff4444);
+}
+
+/* Resume Banner */
+.resume-banner {
+  background: #1a3a1a;
+  border: 1px solid #4caf50;
+  color: #81c784;
+  padding: 12px 16px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+/* Toolbar */
 .toolbar {
   margin-bottom: 16px;
 }
@@ -131,6 +179,13 @@ main {
   opacity: 0.85;
 }
 
+.btn:disabled, .btn-disabled {
+  background: #444 !important;
+  color: #777 !important;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
 .btn-randomize {
   background: #ff4444;
   color: #fff;
@@ -144,6 +199,20 @@ main {
 .btn-secondary {
   background: #333;
   color: #ccc;
+}
+
+/* Quota Cost */
+.quota-cost {
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+.quota-cost.quota-ok {
+  color: #81c784;
+}
+
+.quota-cost.quota-low {
+  color: #ff6b6b;
 }
 
 /* Modal */
@@ -172,7 +241,7 @@ main {
   color: #ff4444;
 }
 
-.modal-content p {
+.modal-content > p {
   font-size: 14px;
   color: #aaa;
   margin-bottom: 16px;
@@ -249,4 +318,21 @@ main {
   border-radius: 6px;
   font-weight: 600;
   margin-bottom: 12px;
+}
+
+/* Paused */
+.paused-banner {
+  text-align: center;
+}
+
+.paused-banner p:first-child {
+  font-size: 15px;
+  color: #ff9800;
+  margin-bottom: 8px;
+}
+
+.paused-sub {
+  font-size: 13px;
+  color: #888;
+  margin-bottom: 16px;
 }

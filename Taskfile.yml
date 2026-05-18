@@ -4,7 +4,7 @@ tasks:
   build:
     desc: Build the Go application
     cmds:
-      - go build -tags "sqlite_fts5" -o ypr-server .
+      - go build -o ypr-server .
 
   build-ts:
     desc: Build TypeScript
@@ -36,7 +36,7 @@ tasks:
   test:
     desc: Run Go unit tests
     cmds:
-      - go test -tags "sqlite_fts5" -v ./...
+      - go test -v ./...
 
   test:e2e:
     desc: Run Playwright e2e tests

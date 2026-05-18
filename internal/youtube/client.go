@@ -27,7 +27,7 @@ type Client struct {
 	service *youtube.Service
 }
 
-func NewClient(ctx context.Context, clientSecretPath string) (*Client, error) {
+func NewClient(ctx context.Context, clientSecretPath, tokenDir string) (*Client, error) {
 	data, err := os.ReadFile(clientSecretPath)
 	if err != nil {
 		return nil, fmt.Errorf("unable to read client secret file: %w", err)
@@ -38,7 +38,10 @@ func NewClient(ctx context.Context, clientSecretPath string) (*Client, error) {
 		return nil, fmt.Errorf("unable to parse client secret file: %w", err)
 	}
 
-	tokenCachePath := filepath.Join(filepath.Dir(clientSecretPath), tokenFileName)
+	if tokenDir == "" {
+		tokenDir = filepath.Dir(clientSecretPath)
+	}
+	tokenCachePath := filepath.Join(tokenDir, tokenFileName)
 	token, err := tokenFromFile(tokenCachePath)
 	if err != nil {
 		token, err = getTokenFromWeb(config)

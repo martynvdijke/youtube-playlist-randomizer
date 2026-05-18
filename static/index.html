@@ -9,11 +9,21 @@
 <body>
 <header>
   <h1>YouTube Playlist Randomizer</h1>
+  <div id="quota-bar" class="quota-bar">
+    <div class="quota-label"><span id="quota-text">Quota: --</span></div>
+    <div class="quota-track">
+      <div id="quota-fill" class="quota-fill" style="width:0%"></div>
+    </div>
+  </div>
 </header>
 
 <main>
   <div id="loading">Loading playlists...</div>
   <div id="error" class="error hidden"></div>
+
+  <div id="resume-banner" class="resume-banner hidden">
+    <span id="resume-text"></span>
+  </div>
 
   <div id="playlists" class="hidden">
     <div class="toolbar">
@@ -31,6 +41,7 @@
   <div class="modal-content">
     <h2>Randomize Playlist</h2>
     <p id="modal-playlist-name"></p>
+    <p id="modal-quota-cost" class="quota-cost"></p>
     <label for="new-name">Name for new randomized playlist:</label>
     <input type="text" id="new-name" placeholder="Enter playlist name">
     <div class="modal-actions">
@@ -52,6 +63,11 @@
       <a id="playlist-link" href="#" target="_blank">Open in YouTube</a>
       <button class="btn btn-primary" onclick="closeProgressModal()">Done</button>
     </div>
+    <div id="progress-paused" class="paused-banner hidden">
+      <p>Quota exhausted. Progress saved.</p>
+      <p class="paused-sub">The job will auto-resume when quota resets (next day) on server restart.</p>
+      <button class="btn btn-primary" onclick="closeProgressModal()">OK</button>
+    </div>
     <div id="progress-error" class="error hidden"></div>
   </div>
 </div>
@@ -59,7 +75,37 @@
 <script>
 let playlists = [];
 let selectedPlaylistId = null;
+let selectedPlaylistCount = 0;
 let pollInterval = null;
+let quotaInfo = null;
+
+const QuotaCostList = 1;
+const QuotaCostCreate = 50;
+const QuotaCostInsert = 50;
+
+async function fetchQuota() {
+  try {
+    const res = await fetch('/api/quota');
+    if (res.ok) {
+      quotaInfo = await res.json();
+      updateQuotaDisplay();
+    }
+  } catch (e) {}
+}
+
+function updateQuotaDisplay() {
+  if (!quotaInfo) return;
+  const pct = quotaInfo.limit > 0 ? Math.min((quotaInfo.used / quotaInfo.limit) * 100, 100) : 0;
+  document.getElementById('quota-text').textContent = 'Quota: ' + quotaInfo.used + ' / ' + quotaInfo.limit + ' used (' + quotaInfo.remaining + ' remaining)';
+  const fill = document.getElementById('quota-fill');
+  fill.style.width = pct + '%';
+  fill.className = 'quota-fill' + (pct > 80 ? ' quota-critical' : pct > 50 ? ' quota-warning' : '');
+}
+
+function estimateQuotaCost(itemCount) {
+  if (!itemCount || itemCount === 0) return QuotaCostCreate;
+  return QuotaCostCreate + itemCount * QuotaCostInsert;
+}
 
 async function fetchPlaylists() {
   try {
@@ -92,12 +138,17 @@ function renderPlaylists(list) {
   for (const pl of list) {
     const card = document.createElement('div');
     card.className = 'playlist-card';
+    const cost = estimateQuotaCost(pl.ItemCount);
     card.innerHTML = `
       <div class="playlist-info">
         <span class="playlist-title">${escapeHtml(pl.Title)}</span>
-        <span class="playlist-count">${pl.ItemCount || '?'} videos</span>
+        <span class="playlist-count">${pl.ItemCount || '?'} videos &middot; ~${cost} quota</span>
       </div>
-      <button class="btn btn-randomize" onclick="openModal('${pl.ID}', '${escapeHtml(pl.Title)}')">Randomize</button>
+      <button class="btn btn-randomize ${quotaInfo && quotaInfo.remaining < cost ? 'btn-disabled' : ''}"
+        onclick="${quotaInfo && quotaInfo.remaining < cost ? '' : "openModal('" + pl.ID + "', '" + escapeHtml(pl.Title) + "', " + (pl.ItemCount || 0) + ")"}"
+        ${quotaInfo && quotaInfo.remaining < cost ? 'disabled' : ''}>
+        ${quotaInfo && quotaInfo.remaining < cost ? 'Insufficient Quota' : 'Randomize'}
+      </button>
     `;
     container.appendChild(card);
   }
@@ -109,9 +160,16 @@ function filterPlaylists() {
   renderPlaylists(filtered);
 }
 
-function openModal(id, title) {
+function openModal(id, title, itemCount) {
   selectedPlaylistId = id;
+  selectedPlaylistCount = itemCount;
   document.getElementById('modal-playlist-name').textContent = title;
+  const cost = estimateQuotaCost(itemCount);
+  const costEl = document.getElementById('modal-quota-cost');
+  if (quotaInfo) {
+    costEl.textContent = 'Estimated quota cost: ' + cost + ' units (' + (quotaInfo.remaining >= cost ? 'Sufficient' : 'Insufficient') + ' remaining)';
+    costEl.className = 'quota-cost ' + (quotaInfo.remaining >= cost ? 'quota-ok' : 'quota-low');
+  }
   const now = new Date();
   const monthYear = now.toLocaleString('default', { month: 'long', year: 'numeric' });
   document.getElementById('new-name').value = title + '-randomized-' + monthYear;
@@ -129,6 +187,7 @@ function closeProgressModal() {
   document.getElementById('progress-fill').style.width = '0%';
   document.getElementById('progress-text').textContent = 'Starting...';
   document.getElementById('progress-result').classList.add('hidden');
+  document.getElementById('progress-paused').classList.add('hidden');
   document.getElementById('progress-error').classList.add('hidden');
   if (pollInterval) {
     clearInterval(pollInterval);
@@ -154,6 +213,7 @@ async function startRandomize() {
   document.getElementById('progress-text').textContent = 'Starting...';
   document.getElementById('progress-fill').style.width = '0%';
   document.getElementById('progress-result').classList.add('hidden');
+  document.getElementById('progress-paused').classList.add('hidden');
   document.getElementById('progress-error').classList.add('hidden');
 
   try {
@@ -186,6 +246,7 @@ function startPolling(jobId) {
       }
       const status = await res.json();
       updateProgress(status);
+      fetchQuota();
     } catch (err) {
       clearInterval(pollInterval);
       pollInterval = null;
@@ -219,10 +280,18 @@ function updateProgress(status) {
       break;
     case 'done':
       fill.style.width = '100%';
-      text.textContent = 'Done!';
       document.getElementById('playlist-link').href = 'https://www.youtube.com/playlist?list=' + status.newPlaylistId;
       document.getElementById('progress-result').classList.remove('hidden');
       document.getElementById('progress-text').textContent = 'Playlist created successfully!';
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+      break;
+    case 'paused':
+      fill.style.width = status.total > 0 ? Math.round((status.done / status.total) * 100) + '%' : '0%';
+      text.textContent = 'Inserted ' + status.done + ' / ' + status.total + ' items';
+      document.getElementById('progress-paused').classList.remove('hidden');
       if (pollInterval) {
         clearInterval(pollInterval);
         pollInterval = null;
@@ -247,6 +316,7 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+fetchQuota();
 fetchPlaylists();
 </script>
 </body>
