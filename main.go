@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"html"
 	"log"
 	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -199,8 +201,12 @@ func main() {
 	mux.Handle("/static/", http.StripPrefix("/static/", fs))
 
 	mux.HandleFunc("/api/quota", handleQuota)
+	mux.HandleFunc("/api/quota/html", handleQuotaHTML)
 	mux.HandleFunc("/api/playlists", handlePlaylists)
+	mux.HandleFunc("/api/playlists/html", handlePlaylistsHTML)
+	mux.HandleFunc("/api/modal/html", handleModalHTML)
 	mux.HandleFunc("/api/randomize", handleRandomize)
+	mux.HandleFunc("/api/randomize/html", handleRandomizeHTML)
 	mux.HandleFunc("/api/jobs/", handleJobStatus)
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
@@ -380,12 +386,20 @@ func getJobProgress(jobID string) *jobProgress {
 }
 
 func handleJobStatus(w http.ResponseWriter, r *http.Request) {
+	jobID := strings.TrimPrefix(r.URL.Path, "/api/jobs/")
+	// Strip /html suffix if present for htmx endpoint
+	if strings.HasSuffix(jobID, "/html") {
+		jobID = strings.TrimSuffix(jobID, "/html")
+		if r.Header.Get("HX-Request") != "true" {
+			r.Header.Set("HX-Request", "true")
+		}
+	}
+
 	if r.Method != http.MethodGet {
 		writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
 		return
 	}
 
-	jobID := strings.TrimPrefix(r.URL.Path, "/api/jobs/")
 	if jobID == "" {
 		writeError(w, http.StatusBadRequest, "Missing job ID")
 		return
@@ -397,7 +411,312 @@ func handleJobStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if r.Header.Get("HX-Request") == "true" {
+		writeJobProgressHTML(w, jobID, jp)
+		return
+	}
+
 	writeJSON(w, http.StatusOK, jp)
+}
+
+func writeQuotaPct(used, limit int) (float64, string) {
+	pct := 0.0
+	if limit > 0 {
+		pct = float64(used) / float64(limit) * 100
+	}
+	fillClass := "quota-fill"
+	if pct > 80 {
+		fillClass += " quota-critical"
+	} else if pct > 50 {
+		fillClass += " quota-warning"
+	}
+	return pct, fillClass
+}
+
+func handleQuotaHTML(w http.ResponseWriter, r *http.Request) {
+	q, err := db.GetQuota()
+	if err != nil {
+		http.Error(w, "Internal error", http.StatusInternalServerError)
+		return
+	}
+	pct, fillClass := writeQuotaPct(q.Used, q.Limit)
+	w.Header().Set("Content-Type", "text/html")
+	fmt.Fprintf(w, `<div class="quota-label"><span>Quota: %d / %d used (%d remaining)</span></div>
+<div class="quota-track"><div class="%s" style="width:%.1f%%"></div></div>`,
+		q.Used, q.Limit, q.Remaining, fillClass, pct)
+}
+
+func handlePlaylistsHTML(w http.ResponseWriter, r *http.Request) {
+	query := strings.ToLower(r.URL.Query().Get("q"))
+
+	if ytClient == nil {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<p>No playlists found.</p>`)
+		return
+	}
+
+	playlists, err := ytClient.GetPlaylists(r.Context())
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if _, err := db.AddQuota(store.QuotaListPlaylists); err != nil {
+		log.Printf("warning: failed to track quota: %v", err)
+	}
+
+	quota, _ := db.GetQuota()
+
+	var filtered []PlaylistResponse
+	for _, pl := range playlists {
+		if query == "" || strings.Contains(strings.ToLower(pl.Title), query) {
+			filtered = append(filtered, PlaylistResponse{
+				ID: pl.ID, Title: pl.Title, ItemCount: pl.ItemCount,
+			})
+		}
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	if len(filtered) == 0 {
+		if query != "" {
+			fmt.Fprint(w, `<p class="no-results">No playlists match your filter.</p>`)
+		} else {
+			fmt.Fprint(w, `<p>No playlists found.</p>`)
+		}
+		return
+	}
+
+	for _, pl := range filtered {
+		cost := store.QuotaCreatePlaylist + pl.ItemCount*store.QuotaInsertItem
+		insufficient := quota != nil && quota.Remaining < cost
+		btnClass := "btn btn-randomize"
+		btnDisabled := ""
+		btnText := "Randomize"
+		if insufficient {
+			btnClass += " btn-disabled"
+			btnDisabled = "disabled"
+			btnText = "Insufficient Quota"
+		}
+
+		itemCountStr := "?"
+		if pl.ItemCount > 0 {
+			itemCountStr = strconv.Itoa(pl.ItemCount)
+		}
+
+		fmt.Fprintf(w, `<div class="playlist-card">
+  <div class="playlist-info">
+    <span class="playlist-title">%s</span>
+    <span class="playlist-count">%s videos &middot; ~%d quota</span>
+  </div>
+  <button class="%s" %s hx-get="/api/modal/html?id=%s&amp;itemCount=%d" hx-target="#modal" hx-swap="innerHTML" hx-on::after-request="showModal()">%s</button>
+</div>`,
+			html.EscapeString(pl.Title), itemCountStr, cost,
+			btnClass, btnDisabled, pl.ID, pl.ItemCount, btnText)
+	}
+}
+
+func handleModalHTML(w http.ResponseWriter, r *http.Request) {
+	playlistID := r.URL.Query().Get("id")
+	itemCountStr := r.URL.Query().Get("itemCount")
+	itemCount, _ := strconv.Atoi(itemCountStr)
+	title := r.URL.Query().Get("title")
+	if title == "" {
+		// If no title provided, try to fetch from YouTube
+		title = "Selected Playlist"
+	}
+
+	quota, _ := db.GetQuota()
+	cost := store.QuotaCreatePlaylist + itemCount*store.QuotaInsertItem
+
+	now := time.Now()
+	monthYear := now.Format("January 2006")
+	defaultName := fmt.Sprintf("%s-randomized-%s", title, monthYear)
+
+	w.Header().Set("Content-Type", "text/html")
+	fmt.Fprintf(w, `<div class="modal-content">
+  <h2>Randomize Playlist</h2>
+  <p>%s</p>
+  <p class="quota-cost %s">Estimated quota cost: %d units (%s remaining)</p>
+  <form hx-post="/api/randomize/html" hx-target="#progress-modal" hx-swap="innerHTML" hx-on::after-request="showProgressModal()">
+    <input type="hidden" name="playlistId" value="%s">
+    <label for="new-name">Name for new randomized playlist:</label>
+    <input type="text" id="new-name" name="newName" placeholder="Enter playlist name" value="%s" required>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button type="submit" class="btn btn-primary">Randomize</button>
+    </div>
+  </form>
+</div>`,
+		html.EscapeString(title),
+		quotaCostClass(quota, cost), cost, quotaText(quota, cost),
+		html.EscapeString(playlistID),
+		html.EscapeString(defaultName))
+}
+
+func quotaCostClass(quota *store.QuotaInfo, cost int) string {
+	if quota != nil && quota.Remaining >= cost {
+		return "quota-cost quota-ok"
+	}
+	return "quota-cost quota-low"
+}
+
+func quotaText(quota *store.QuotaInfo, cost int) string {
+	if quota == nil {
+		return "Unknown"
+	}
+	if quota.Remaining >= cost {
+		return "Sufficient"
+	}
+	return "Insufficient"
+}
+
+func handleRandomizeHTML(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		fmt.Fprint(w, `<p class="error">Method not allowed</p>`)
+		return
+	}
+
+	if ytClient == nil {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, `<p class="error">YouTube API not available in mock mode</p>`)
+		return
+	}
+
+	playlistID := r.FormValue("playlistId")
+	newName := r.FormValue("newName")
+
+	if playlistID == "" || newName == "" {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, `<p class="error">playlistId and newName are required</p>`)
+		return
+	}
+
+	quota, err := db.GetQuota()
+	if err != nil {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, `<p class="error">%s</p>`, html.EscapeString(err.Error()))
+		return
+	}
+
+	if quota.Remaining < store.QuotaCreatePlaylist+store.QuotaListPlaylistItems+store.QuotaInsertItem {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusTooManyRequests)
+		fmt.Fprintf(w, `<p class="error">Insufficient API quota remaining (%d). Wait for quota reset.</p>`, quota.Remaining)
+		return
+	}
+
+	jobID := fmt.Sprintf("%d", time.Now().UnixNano())
+
+	if err := db.CreateJob(jobID, playlistID, "", newName); err != nil {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintf(w, `<p class="error">Failed to create job: %s</p>`, html.EscapeString(err.Error()))
+		return
+	}
+
+	jp := &jobProgress{Status: JobPending}
+	go runJob(context.Background(), jobID, jp, playlistID, newName)
+
+	w.Header().Set("Content-Type", "text/html")
+	writeJobProgressHTML(w, jobID, jp)
+}
+
+func writeJobProgressHTML(w http.ResponseWriter, jobID string, jp *jobProgress) {
+	jp.mu.RLock()
+	status := jp.Status
+	total := jp.Total
+	done := jp.Done
+	newPlaylistID := jp.NewPlaylistID
+	errStr := jp.Error
+	jp.mu.RUnlock()
+
+	w.Header().Set("Content-Type", "text/html")
+
+	switch status {
+	case JobPending, JobFetching, JobShuffling:
+		label := "Starting..."
+		pct := 0
+		switch status {
+		case JobFetching:
+			label = "Fetching playlist items..."
+			pct = 25
+		case JobShuffling:
+			label = "Shuffling items..."
+			pct = 50
+		}
+		fmt.Fprintf(w, `<div id="progress-content" class="modal-content" hx-get="/api/jobs/%s/html" hx-trigger="every 1500ms" hx-swap="outerHTML">
+  <h2>Randomizing...</h2>
+  <div class="progress-bar"><div class="progress-fill" style="width:%d%%"></div></div>
+  <p>%s</p>
+</div>`, html.EscapeString(jobID), pct, html.EscapeString(label))
+
+	case JobInserting:
+		pct := 50
+		if total > 0 {
+			pct = int(float64(done)/float64(total)*50) + 50
+			if pct > 99 {
+				pct = 99
+			}
+		}
+		fmt.Fprintf(w, `<div id="progress-content" class="modal-content" hx-get="/api/jobs/%s/html" hx-trigger="every 1500ms" hx-swap="outerHTML">
+  <h2>Randomizing...</h2>
+  <div class="progress-bar"><div class="progress-fill" style="width:%d%%"></div></div>
+  <p>Inserting items... %d / %d</p>
+</div>`, html.EscapeString(jobID), pct, done, total)
+
+	case JobDone:
+		link := ""
+		if newPlaylistID != "" {
+			link = fmt.Sprintf(`<a id="playlist-link" href="https://www.youtube.com/playlist?list=%s" target="_blank">Open in YouTube</a>`, html.EscapeString(newPlaylistID))
+		}
+		// Also update quota display after job completes
+		fmt.Fprintf(w, `<div id="progress-result" class="modal-content" hx-get="/api/quota/html" hx-trigger="load" hx-target="#quota-bar" hx-swap="innerHTML">
+  <h2>Randomizing...</h2>
+  <div class="progress-bar"><div class="progress-fill progress-done" style="width:100%%"></div></div>
+  <p>Playlist created successfully!</p>
+  <div id="progress-result" style="text-align:center">
+    %s
+    <button class="btn btn-primary" onclick="closeProgressModal()">Done</button>
+  </div>
+</div>`, link)
+
+	case JobPaused:
+		pct := 0
+		if total > 0 {
+			pct = int(float64(done)/float64(total) * 100)
+		}
+		fmt.Fprintf(w, `<div id="progress-paused-content" class="modal-content">
+  <h2>Randomizing...</h2>
+  <div class="progress-bar"><div class="progress-fill" style="width:%d%%"></div></div>
+  <p>Inserted %d / %d items</p>
+  <div class="paused-banner">
+    <p>Quota exhausted. Progress saved.</p>
+    <p class="paused-sub">The job will auto-resume when quota resets (next day) on server restart.</p>
+    <button class="btn btn-primary" onclick="closeProgressModal()">OK</button>
+  </div>
+</div>`, pct, done, total)
+
+	case JobError:
+		fmt.Fprintf(w, `<div id="progress-error-content" class="modal-content">
+  <h2>Randomizing...</h2>
+  <div class="progress-bar"><div class="progress-fill" style="width:100%%"></div></div>
+  <p class="error">%s</p>
+  <div style="text-align:center;margin-top:12px">
+    <button class="btn btn-primary" onclick="closeProgressModal()">OK</button>
+  </div>
+</div>`, html.EscapeString(errStr))
+
+	default:
+		fmt.Fprintf(w, `<div id="progress-content" class="modal-content" hx-get="/api/jobs/%s/html" hx-trigger="every 1500ms" hx-swap="outerHTML">
+  <h2>Randomizing...</h2>
+  <div class="progress-bar"><div class="progress-fill" style="width:0%%"></div></div>
+  <p>Starting...</p>
+</div>`, html.EscapeString(jobID))
+	}
 }
 
 func runJob(ctx context.Context, jobID string, jp *jobProgress, playlistID, newName string) {

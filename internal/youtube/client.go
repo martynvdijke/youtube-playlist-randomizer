@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/models"
@@ -194,8 +195,19 @@ func saveToken(path string, token *oauth2.Token) error {
 }
 
 func getTokenFromWeb(config *oauth2.Config) (*oauth2.Token, error) {
-	// Try default port first, then fallback to random port
+	// In Docker, use port 6270 (same as app, acquired before ListenAndServe)
+	// so docker -p 6270:6270 covers both the app and OAuth callback.
+	mainPortStr := os.Getenv("PORT")
+	mainPort := 6270
+	if p, err := strconv.Atoi(mainPortStr); err == nil && p > 0 {
+		mainPort = p
+	}
+
 	ports := []int{8080, 0}
+	if os.Getenv("DOCKER") == "true" {
+		ports = []int{mainPort, 0}
+	}
+
 	var lastErr error
 
 	for _, port := range ports {

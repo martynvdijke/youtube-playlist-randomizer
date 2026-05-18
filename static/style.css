@@ -336,3 +336,26 @@ main {
   color: #888;
   margin-bottom: 16px;
 }
+
+/* htmx loading states */
+.htmx-request {
+  opacity: 0.7;
+  transition: opacity 0.3s;
+}
+
+.htmx-indicator {
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.htmx-request .htmx-indicator {
+  opacity: 1;
+}
+
+.htmx-request.htmx-indicator {
+  opacity: 1;
+}
+
+.progress-done {
+  background: linear-gradient(90deg, #4caf50, #66bb6a) !important;
+}

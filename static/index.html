@@ -5,21 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>YouTube Playlist Randomizer</title>
 <link rel="stylesheet" href="/static/style.css">
+<script src="https://unpkg.com/htmx.org@2.0.4"></script>
 <script defer src="/static/js/app.js"></script>
 </head>
 <body>
 <header>
   <h1>YouTube Playlist Randomizer</h1>
-  <div id="quota-bar" class="quota-bar">
-    <div class="quota-label"><span id="quota-text">Quota: --</span></div>
+  <div id="quota-bar" class="quota-bar" hx-get="/api/quota/html" hx-trigger="load, every 30s" hx-swap="innerHTML">
+    <div class="quota-label"><span>Quota: --</span></div>
     <div class="quota-track">
-      <div id="quota-fill" class="quota-fill" style="width:0%"></div>
+      <div class="quota-fill" style="width:0%"></div>
     </div>
   </div>
 </header>
 
 <main>
-  <div id="loading">Loading playlists...</div>
+  <div id="loading" hx-get="/api/playlists/html" hx-trigger="load delay:100ms" hx-target="#playlist-list" hx-swap="innerHTML" hx-on::before-request="document.getElementById('loading').classList.remove('hidden')" hx-on::after-request="document.getElementById('loading').classList.add('hidden')">
+    Loading playlists...
+  </div>
   <div id="error" class="error hidden"></div>
 
   <div id="resume-banner" class="resume-banner hidden">
@@ -28,7 +31,9 @@
 
   <div id="playlists" class="hidden">
     <div class="toolbar">
-      <input type="text" id="search" placeholder="Filter playlists..." oninput="filterPlaylists()">
+      <input type="text" id="search" name="q" placeholder="Filter playlists..."
+             hx-get="/api/playlists/html" hx-trigger="keyup changed delay:300ms"
+             hx-target="#playlist-list" hx-swap="innerHTML">
     </div>
     <div id="playlist-list"></div>
   </div>
@@ -38,39 +43,10 @@
   </div>
 </main>
 
-<div id="modal" class="modal hidden">
-  <div class="modal-content">
-    <h2>Randomize Playlist</h2>
-    <p id="modal-playlist-name"></p>
-    <p id="modal-quota-cost" class="quota-cost"></p>
-    <label for="new-name">Name for new randomized playlist:</label>
-    <input type="text" id="new-name" placeholder="Enter playlist name">
-    <div class="modal-actions">
-      <button id="cancel-btn" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
-      <button id="submit-btn" class="btn btn-primary" onclick="startRandomize()">Randomize</button>
-    </div>
-  </div>
-</div>
+<!-- Randomize Modal -->
+<div id="modal" class="modal hidden"></div>
 
-<div id="progress-modal" class="modal hidden">
-  <div class="modal-content">
-    <h2>Randomizing...</h2>
-    <div class="progress-bar">
-      <div id="progress-fill" class="progress-fill"></div>
-    </div>
-    <p id="progress-text">Starting...</p>
-    <div id="progress-result" class="hidden">
-      <p>Playlist created successfully!</p>
-      <a id="playlist-link" href="#" target="_blank">Open in YouTube</a>
-      <button class="btn btn-primary" onclick="closeProgressModal()">Done</button>
-    </div>
-    <div id="progress-paused" class="paused-banner hidden">
-      <p>Quota exhausted. Progress saved.</p>
-      <p class="paused-sub">The job will auto-resume when quota resets (next day) on server restart.</p>
-      <button class="btn btn-primary" onclick="closeProgressModal()">OK</button>
-    </div>
-    <div id="progress-error" class="error hidden"></div>
-  </div>
-</div>
+<!-- Progress Modal -->
+<div id="progress-modal" class="modal hidden"></div>
 </body>
 </html>
