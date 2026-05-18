@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/models"
+	"github.com/martynvdijke/youtube-playlist-randomizer/internal/telemetry"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/option"
@@ -26,9 +27,10 @@ const (
 
 type Client struct {
 	service *youtube.Service
+	otel    *telemetry.Telemetry
 }
 
-func NewClient(ctx context.Context, clientSecretPath, tokenDir string) (*Client, error) {
+func NewClient(ctx context.Context, clientSecretPath, tokenDir string, otel *telemetry.Telemetry) (*Client, error) {
 	data, err := os.ReadFile(clientSecretPath)
 	if err != nil {
 		return nil, fmt.Errorf("unable to read client secret file: %w", err)
@@ -59,7 +61,7 @@ func NewClient(ctx context.Context, clientSecretPath, tokenDir string) (*Client,
 		return nil, fmt.Errorf("unable to create YouTube service: %w", err)
 	}
 
-	return &Client{service: service}, nil
+	return &Client{service: service, otel: otel}, nil
 }
 
 func (c *Client) GetPlaylists(ctx context.Context) ([]models.Playlist, error) {
@@ -74,6 +76,9 @@ func (c *Client) GetPlaylists(ctx context.Context) ([]models.Playlist, error) {
 		response, err := call.Context(ctx).Do()
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch playlists: %w", err)
+		}
+		if c.otel != nil {
+			c.otel.RecordYouTubeAPICall(ctx, "playlists.list")
 		}
 		allItems = append(allItems, response.Items...)
 		if response.NextPageToken == "" {
@@ -113,6 +118,9 @@ func (c *Client) GetPlaylistItems(ctx context.Context, playlistID string) ([]mod
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch playlist items: %w", err)
 		}
+		if c.otel != nil {
+			c.otel.RecordYouTubeAPICall(ctx, "playlistItems.list")
+		}
 		allItems = append(allItems, response.Items...)
 		if response.NextPageToken == "" {
 			break
@@ -137,6 +145,9 @@ func (c *Client) CreatePlaylist(ctx context.Context, title string) (string, erro
 	if err != nil {
 		return "", fmt.Errorf("failed to create playlist: %w", err)
 	}
+	if c.otel != nil {
+		c.otel.RecordYouTubeAPICall(ctx, "playlists.insert")
+	}
 	return response.Id, nil
 }
 
@@ -155,6 +166,9 @@ func (c *Client) InsertPlaylistItem(ctx context.Context, playlistID, videoID str
 	_, err := c.service.PlaylistItems.Insert([]string{"snippet"}, item).Context(ctx).Do()
 	if err != nil {
 		return fmt.Errorf("failed to insert playlist item: %w", err)
+	}
+	if c.otel != nil {
+		c.otel.RecordYouTubeAPICall(ctx, "playlistItems.insert")
 	}
 	return nil
 }

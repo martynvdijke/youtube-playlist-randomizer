@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/store"
+	"github.com/martynvdijke/youtube-playlist-randomizer/internal/telemetry"
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/youtube"
 )
 
@@ -78,6 +79,7 @@ var (
 	db       *store.Store
 	dataDir  string
 	jobsMu   sync.Mutex
+	otel     *telemetry.Telemetry
 )
 
 func findClientSecret() string {
@@ -120,13 +122,22 @@ func main() {
 
 	dataDir = *dataDirFlag
 
-	dbPath := filepath.Join(dataDir, "ypr.db")
 	var err error
+	otel, err = telemetry.New()
+	if err != nil {
+		log.Printf("warning: failed to initialize telemetry: %v", err)
+		otel = nil
+	}
+
+	dbPath := filepath.Join(dataDir, "ypr.db")
 	db, err = store.Open(dbPath)
 	if err != nil {
 		log.Fatalf("Failed to open database: %v", err)
 	}
 	defer db.Close()
+	if otel != nil {
+		defer otel.Shutdown(context.Background())
+	}
 
 	ctx := context.Background()
 
@@ -139,7 +150,7 @@ func main() {
 			secretPath = findClientSecret()
 		}
 
-		ytClient, err = youtube.NewClient(ctx, secretPath, dataDir)
+		ytClient, err = youtube.NewClient(ctx, secretPath, dataDir, otel)
 		if err != nil {
 			log.Fatalf("Failed to create YouTube client: %v", err)
 		}
@@ -218,9 +229,15 @@ func main() {
 	})
 
 	addr := fmt.Sprintf(":%d", *port)
+
+	var handler http.Handler = corsMiddleware(mux)
+	if otel != nil {
+		handler = otel.Middleware(handler)
+	}
+
 	server := &http.Server{
 		Addr:         addr,
-		Handler:      corsMiddleware(mux),
+		Handler:      handler,
 		ReadTimeout:  10 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
@@ -274,6 +291,9 @@ func handleQuota(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	if otel != nil {
+		otel.RecordQuotaMetrics(r.Context(), q.Used, q.Limit, q.Remaining)
+	}
 	writeJSON(w, http.StatusOK, QuotaResponse{
 		Used:      q.Used,
 		Limit:     q.Limit,
@@ -298,7 +318,6 @@ func handlePlaylists(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-
 	if _, err := db.AddQuota(store.QuotaListPlaylists); err != nil {
 		log.Printf("warning: failed to track quota: %v", err)
 	}
@@ -360,6 +379,10 @@ func handleRandomize(w http.ResponseWriter, r *http.Request) {
 
 	jobsMu.Lock()
 	jobsMu.Unlock()
+
+	if otel != nil {
+		otel.RecordJobCreated(r.Context())
+	}
 
 	go runJob(context.Background(), jobID, jp, req.PlaylistID, req.NewName)
 
@@ -733,6 +756,9 @@ func runJob(ctx context.Context, jobID string, jp *jobProgress, playlistID, newN
 		jp.Error = errMsg
 		jp.mu.Unlock()
 		db.SetJobError(jobID, errMsg)
+		if otel != nil {
+			otel.RecordJobFailed(context.Background(), errMsg)
+		}
 	}
 
 	updateProgress := func(done, total int, newPlaylistID string) {
@@ -804,6 +830,9 @@ func runJob(ctx context.Context, jobID string, jp *jobProgress, playlistID, newN
 		if quota.Remaining < store.QuotaInsertItem {
 			log.Printf("Quota exhausted after %d/%d items. Job %s paused.", jp.Done, jp.Total, jobID)
 			updateStatus(JobPaused)
+			if otel != nil {
+				otel.RecordJobPaused(context.Background(), jp.Done, jp.Total)
+			}
 			return
 		}
 
@@ -832,6 +861,9 @@ func runJob(ctx context.Context, jobID string, jp *jobProgress, playlistID, newN
 	updateProgress(jp.Total, jp.Total, "")
 	updateStatus(JobDone)
 	db.SetJobDone(jobID)
+	if otel != nil {
+		otel.RecordJobCompleted(context.Background(), jp.Total)
+	}
 }
 
 func resumeJob(ctx context.Context, j store.Job, jp *jobProgress) {
