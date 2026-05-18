@@ -1,3 +1,28 @@
+# [1.0.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v0.5.2...v1.0.0) (2026-05-18)
+
+
+* feat!: add OpenAPI 3.0 swagger specification documenting YouTube Data API v3 operations ([c3e4a8e](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/c3e4a8e8a9e448fda6d77408b870a9c37b863dd8))
+* Merge pull request [#22](https://github.com/martynvdijke/youtube-playlist-randomizer/issues/22) from martynvdijke/go-rewrite ([c7f3f6c](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/c7f3f6c187a3a2db243b8641d14b3acc0d7dae2b))
+
+
+### Bug Fixes
+
+* playwright e2e tests and ignore test output dirs ([2aa49f9](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/2aa49f97bb17ee9f977e0f8460e30c594ca34b43))
+* set config.RedirectURL to match local callback server ([7e3dca4](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/7e3dca44830c74acd9fada1b4a4a6f796ceaadaa))
+
+
+### Features
+
+* add SQLite-backed quota tracking, job persistence, and resume ([fc890ff](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/fc890ff2e533b0f0a77e29eb8d80f089e3b79adb))
+* rewrite Python CLI to Go backend with tests ([81fe467](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/81fe4676d415d50c51ecf92c0ed8f0cec34ecb7f))
+
+
+### BREAKING CHANGES
+
+* static/swagger.json introduces a new JSON file that documents the API contract. The gitignore was updated to allow tracking the swagger file despite the *.json ignore rule.
+* move over to go rewrite with web interface
+* Major Breaking Release - rewrite into Go with web frontend
+
 ## [0.5.2](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v0.5.1...v0.5.2) (2025-08-14)
 
 
