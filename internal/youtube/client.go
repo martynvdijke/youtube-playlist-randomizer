@@ -208,6 +208,7 @@ func getTokenViaLocalServer(config *oauth2.Config, preferredPort int) (*oauth2.T
 
 	port := listener.Addr().(*net.TCPAddr).Port
 	redirectURL := fmt.Sprintf("http://localhost:%d/callback", port)
+	config.RedirectURL = redirectURL
 
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
 
