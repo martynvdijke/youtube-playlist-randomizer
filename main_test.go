@@ -167,8 +167,8 @@ func TestFindClientSecret(t *testing.T) {
 }
 
 func TestVersionConstant(t *testing.T) {
-	if version != "1.0.0" {
-		t.Errorf("expected version '1.0.0', got %q", version)
+	if version != "1.1.0" {
+		t.Errorf("expected version '1.1.0', got %q", version)
 	}
 }
 
