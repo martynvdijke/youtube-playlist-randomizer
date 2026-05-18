@@ -1,3 +1,11 @@
+## [1.1.1](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.1.0...v1.1.1) (2026-05-18)
+
+
+### Bug Fixes
+
+* remove hardcoded version test ([9be9d17](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/9be9d178936cbc75ece11adc4487f1f245b80cb1))
+* update version test to match 1.1.0 ([d2e37d8](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/d2e37d8cb38795d3af7ec233c10403813e27a697))
+
 # [1.1.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.0.0...v1.1.0) (2026-05-18)
 
 
