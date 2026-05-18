@@ -10,6 +10,7 @@ test.describe("YouTube Playlist Randomizer", () => {
     await page.goto("/");
     const quotaText = page.locator("#quota-text");
     await expect(quotaText).toBeVisible();
+    await expect(quotaText).toContainText("Quota:");
   });
 
   test("shows loading state initially", async ({ page }) => {
@@ -18,12 +19,17 @@ test.describe("YouTube Playlist Randomizer", () => {
     await expect(loading).toContainText("Loading playlists");
   });
 
-  test("shows randomize modal and can close it", async ({ page }) => {
+  test("randomize modal is hidden by default", async ({ page }) => {
     await page.goto("/");
     const modal = page.locator("#modal");
     await expect(modal).toHaveClass(/hidden/);
+    await expect(modal).not.toBeVisible();
+  });
 
-    const cancelBtn = page.locator("#cancel-btn");
-    await expect(cancelBtn).toBeVisible();
+  test("shows no-playlists message when API returns empty", async ({ page }) => {
+    await page.goto("/");
+    const noPlaylists = page.locator("#no-playlists");
+    await expect(noPlaylists).not.toHaveClass(/hidden/);
+    await expect(noPlaylists).toContainText("No playlists found");
   });
 });

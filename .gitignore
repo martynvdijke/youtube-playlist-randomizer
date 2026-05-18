@@ -27,6 +27,10 @@ ypr-server
 tmp/
 node_modules/
 
+# Test output
+playwright-report/
+test-results/
+
 # Database
 ypr.db
 
