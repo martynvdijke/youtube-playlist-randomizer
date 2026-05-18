@@ -19,3 +19,5 @@ lib64
 *.pyo
 youtube_playlist_randomizer/__pycache_/*
 poetry.lock
+ypr-server
+tmp/build-errors.log

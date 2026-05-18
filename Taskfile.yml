@@ -1,0 +1,126 @@
+version: '3'
+
+tasks:
+  build:
+    desc: Build the Go application
+    cmds:
+      - go build -tags "sqlite_fts5" -o ypr-server .
+
+  build-ts:
+    desc: Build TypeScript
+    cmds:
+      - npx tsc
+
+  typecheck:
+    desc: Type check TypeScript
+    cmds:
+      - npx tsc --noEmit
+
+  run:
+    desc: Run the application locally
+    deps:
+      - build
+      - build-ts
+    cmds:
+      - ./ypr-server
+    env:
+      PORT: "6270"
+
+  dev:
+    desc: Run with hot reloading (requires air)
+    cmds:
+      - air -c .air.toml
+    env:
+      PORT: "6270"
+
+  test:
+    desc: Run Go unit tests
+    cmds:
+      - go test -tags "sqlite_fts5" -v ./...
+
+  test:e2e:
+    desc: Run Playwright e2e tests
+    deps:
+      - build-ts
+    cmds:
+      - npx playwright test
+
+  test-all:
+    desc: Run all tests
+    cmds:
+      - task: test
+      - task: test:e2e
+
+  lint:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  tidy:
+    desc: Format and tidy Go modules
+    cmds:
+      - go fmt ./...
+      - go mod tidy
+
+  docker-build:
+    desc: Build Docker image
+    cmds:
+      - docker build -t ypr .
+
+  docker-run:
+    desc: Run Docker container
+    cmds:
+      - docker run -p 6270:6270 ypr
+
+  docker-push:
+    desc: Push Docker image to registry
+    cmds:
+      - docker tag ypr:latest ghcr.io/{{.USER}}/ypr:latest
+      - docker push ghcr.io/{{.USER}}/ypr:latest
+
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -f ypr-server
+      - rm -f ypr.db
+
+  generate-swagger:
+    desc: Generate Swagger/OpenAPI documentation
+    cmds:
+      - swag init --parseDependency --parseInternal
+
+  prepush:
+    desc: Run all checks required before pushing (lint, build, test)
+    cmds:
+      - task: tidy
+      - task: generate-swagger
+      - task: lint
+      - task: build-ts
+      - task: build
+      - task: test
+
+  install-hooks:
+    desc: Install git pre-push hook that runs prepush checks
+    cmds:
+      - |
+        mkdir -p .git/hooks
+        cat > .git/hooks/pre-push << 'HOOK'
+        #!/bin/sh
+        echo "==> Running pre-push checks..."
+        task prepush 2>&1
+        if [ $? -ne 0 ]; then
+          echo "==> Pre-push checks FAILED. Fix errors before pushing."
+          exit 1
+        fi
+        echo "==> Pre-push checks PASSED."
+        HOOK
+        chmod +x .git/hooks/pre-push
+        echo "Pre-push hook installed at .git/hooks/pre-push"
+
+  all:
+    desc: Run build, test, and lint
+    cmds:
+      - task: tidy
+      - task: build
+      - task: test
+      - task: lint

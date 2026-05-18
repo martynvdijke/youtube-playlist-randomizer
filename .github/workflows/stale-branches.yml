@@ -1,0 +1,71 @@
+name: Stale Branches
+
+on:
+  schedule:
+    - cron: '0 2 * * 0' # Weekly on Sunday at 02:00 UTC
+  workflow_dispatch:
+    inputs:
+      days-old:
+        description: 'Delete branches older than this many days'
+        required: true
+        default: '90'
+      dry-run:
+        description: 'If true, only list branches without deleting'
+        required: true
+        default: 'true'
+
+jobs:
+  stale-branches:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Delete stale branches
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DAYS_OLD: ${{ github.event.inputs.days-old || '90' }}
+          DRY_RUN: ${{ github.event.inputs.dry-run || 'true' }}
+        run: |
+          default_branch="${{ github.event.repository.default_branch }}"
+          cutoff=$(date -d "-${DAYS_OLD} days" +%s)
+          protected=("$default_branch" "gh-pages" "develop")
+
+          echo "=== Stale Branch Cleanup ==="
+          echo "Default branch: $default_branch"
+          echo "Cutoff: $(date -d @$cutoff)"
+          echo "Dry run: $DRY_RUN"
+
+          for branch in $(git branch -r --format='%(refname:short)' | sed 's/origin\///' | sort -u); do
+            # Skip protected branches
+            skip=false
+            for protected_branch in "${protected[@]}"; do
+              if [[ "$branch" == "$protected_branch" ]]; then
+                skip=true
+                break
+              fi
+            done
+            $skip && echo "  Skipping protected branch: $branch" && continue
+
+            last_commit=$(git log -1 --format='%ct' "origin/$branch" 2>/dev/null || true)
+            if [[ -z "$last_commit" ]]; then
+              echo "  Skipping (no commits found): $branch"
+              continue
+            fi
+
+            age_days=$(( ($(date +%s) - last_commit) / 86400 ))
+            if (( age_days > DAYS_OLD )); then
+              echo "  Stale ($age_days days): $branch"
+              if [[ "$DRY_RUN" != "true" ]]; then
+                echo "    -> Creating archive tag: archive/${branch//\//-}"
+                git tag "archive/${branch//\//-}" "origin/$branch" 2>/dev/null || true
+                git push origin "archive/${branch//\//-}" 2>/dev/null || true
+                echo "    -> Deleting branch: $branch"
+                git push origin --delete "$branch" 2>/dev/null || true
+              fi
+            else
+              echo "  Active ($age_days days): $branch"
+            fi
+          done

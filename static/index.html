@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YouTube Playlist Randomizer</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1>YouTube Playlist Randomizer</h1>
+</header>
+
+<main>
+  <div id="loading">Loading playlists...</div>
+  <div id="error" class="error hidden"></div>
+
+  <div id="playlists" class="hidden">
+    <div class="toolbar">
+      <input type="text" id="search" placeholder="Filter playlists..." oninput="filterPlaylists()">
+    </div>
+    <div id="playlist-list"></div>
+  </div>
+
+  <div id="no-playlists" class="hidden">
+    <p>No playlists found.</p>
+  </div>
+</main>
+
+<div id="modal" class="modal hidden">
+  <div class="modal-content">
+    <h2>Randomize Playlist</h2>
+    <p id="modal-playlist-name"></p>
+    <label for="new-name">Name for new randomized playlist:</label>
+    <input type="text" id="new-name" placeholder="Enter playlist name">
+    <div class="modal-actions">
+      <button id="cancel-btn" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button id="submit-btn" class="btn btn-primary" onclick="startRandomize()">Randomize</button>
+    </div>
+  </div>
+</div>
+
+<div id="progress-modal" class="modal hidden">
+  <div class="modal-content">
+    <h2>Randomizing...</h2>
+    <div class="progress-bar">
+      <div id="progress-fill" class="progress-fill"></div>
+    </div>
+    <p id="progress-text">Starting...</p>
+    <div id="progress-result" class="hidden">
+      <p>Playlist created successfully!</p>
+      <a id="playlist-link" href="#" target="_blank">Open in YouTube</a>
+      <button class="btn btn-primary" onclick="closeProgressModal()">Done</button>
+    </div>
+    <div id="progress-error" class="error hidden"></div>
+  </div>
+</div>
+
+<script>
+let playlists = [];
+let selectedPlaylistId = null;
+let pollInterval = null;
+
+async function fetchPlaylists() {
+  try {
+    const res = await fetch('/api/playlists');
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to fetch playlists');
+    }
+    playlists = await res.json();
+    document.getElementById('loading').classList.add('hidden');
+    if (playlists.length === 0) {
+      document.getElementById('no-playlists').classList.remove('hidden');
+    } else {
+      document.getElementById('playlists').classList.remove('hidden');
+      renderPlaylists(playlists);
+    }
+  } catch (err) {
+    document.getElementById('loading').classList.add('hidden');
+    showError(err.message);
+  }
+}
+
+function renderPlaylists(list) {
+  const container = document.getElementById('playlist-list');
+  container.innerHTML = '';
+  if (list.length === 0) {
+    container.innerHTML = '<p class="no-results">No playlists match your filter.</p>';
+    return;
+  }
+  for (const pl of list) {
+    const card = document.createElement('div');
+    card.className = 'playlist-card';
+    card.innerHTML = `
+      <div class="playlist-info">
+        <span class="playlist-title">${escapeHtml(pl.Title)}</span>
+        <span class="playlist-count">${pl.ItemCount || '?'} videos</span>
+      </div>
+      <button class="btn btn-randomize" onclick="openModal('${pl.ID}', '${escapeHtml(pl.Title)}')">Randomize</button>
+    `;
+    container.appendChild(card);
+  }
+}
+
+function filterPlaylists() {
+  const q = document.getElementById('search').value.toLowerCase();
+  const filtered = playlists.filter(pl => pl.Title.toLowerCase().includes(q));
+  renderPlaylists(filtered);
+}
+
+function openModal(id, title) {
+  selectedPlaylistId = id;
+  document.getElementById('modal-playlist-name').textContent = title;
+  const now = new Date();
+  const monthYear = now.toLocaleString('default', { month: 'long', year: 'numeric' });
+  document.getElementById('new-name').value = title + '-randomized-' + monthYear;
+  document.getElementById('modal').classList.remove('hidden');
+  document.getElementById('new-name').focus();
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.add('hidden');
+  selectedPlaylistId = null;
+}
+
+function closeProgressModal() {
+  document.getElementById('progress-modal').classList.add('hidden');
+  document.getElementById('progress-fill').style.width = '0%';
+  document.getElementById('progress-text').textContent = 'Starting...';
+  document.getElementById('progress-result').classList.add('hidden');
+  document.getElementById('progress-error').classList.add('hidden');
+  if (pollInterval) {
+    clearInterval(pollInterval);
+    pollInterval = null;
+  }
+}
+
+function showError(msg) {
+  const el = document.getElementById('error');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+}
+
+async function startRandomize() {
+  const name = document.getElementById('new-name').value.trim();
+  if (!name) {
+    alert('Please enter a name for the new playlist.');
+    return;
+  }
+  const id = selectedPlaylistId;
+  closeModal();
+  document.getElementById('progress-modal').classList.remove('hidden');
+  document.getElementById('progress-text').textContent = 'Starting...';
+  document.getElementById('progress-fill').style.width = '0%';
+  document.getElementById('progress-result').classList.add('hidden');
+  document.getElementById('progress-error').classList.add('hidden');
+
+  try {
+    const res = await fetch('/api/randomize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ playlistId: id, newName: name })
+    });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Failed to start randomization');
+    }
+    const job = await res.json();
+    startPolling(job.jobId);
+  } catch (err) {
+    document.getElementById('progress-modal').classList.add('hidden');
+    showError(err.message);
+  }
+}
+
+function startPolling(jobId) {
+  if (pollInterval) clearInterval(pollInterval);
+  pollInterval = setInterval(async () => {
+    try {
+      const res = await fetch('/api/jobs/' + jobId);
+      if (!res.ok) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+        throw new Error('Failed to check job status');
+      }
+      const status = await res.json();
+      updateProgress(status);
+    } catch (err) {
+      clearInterval(pollInterval);
+      pollInterval = null;
+      document.getElementById('progress-text').textContent = 'Error checking status';
+      document.getElementById('progress-error').textContent = err.message;
+      document.getElementById('progress-error').classList.remove('hidden');
+    }
+  }, 1500);
+}
+
+function updateProgress(status) {
+  const fill = document.getElementById('progress-fill');
+  const text = document.getElementById('progress-text');
+
+  switch (status.status) {
+    case 'pending':
+      text.textContent = 'Waiting to start...';
+      break;
+    case 'fetching':
+      text.textContent = 'Fetching playlist items...';
+      fill.style.width = '25%';
+      break;
+    case 'shuffling':
+      text.textContent = 'Shuffling items...';
+      fill.style.width = '50%';
+      break;
+    case 'inserting':
+      const pct = status.total > 0 ? Math.round((status.done / status.total) * 50) + 50 : 50;
+      fill.style.width = Math.min(pct, 99) + '%';
+      text.textContent = 'Inserting items... ' + status.done + ' / ' + status.total;
+      break;
+    case 'done':
+      fill.style.width = '100%';
+      text.textContent = 'Done!';
+      document.getElementById('playlist-link').href = 'https://www.youtube.com/playlist?list=' + status.newPlaylistId;
+      document.getElementById('progress-result').classList.remove('hidden');
+      document.getElementById('progress-text').textContent = 'Playlist created successfully!';
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+      break;
+    case 'error':
+      fill.style.width = '100%';
+      text.textContent = 'Error';
+      document.getElementById('progress-error').textContent = status.error || 'An unknown error occurred';
+      document.getElementById('progress-error').classList.remove('hidden');
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+      break;
+  }
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+fetchPlaylists();
+</script>
+</body>
+</html>

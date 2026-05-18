@@ -63,7 +63,7 @@ func (c *Client) GetPlaylists(ctx context.Context) ([]models.Playlist, error) {
 	nextPageToken := ""
 
 	for {
-		call := c.service.Playlists.List([]string{"snippet"}).Mine(true)
+		call := c.service.Playlists.List([]string{"snippet", "contentDetails"}).Mine(true)
 		if nextPageToken != "" {
 			call = call.PageToken(nextPageToken)
 		}
@@ -80,11 +80,18 @@ func (c *Client) GetPlaylists(ctx context.Context) ([]models.Playlist, error) {
 
 	playlists := make([]models.Playlist, 0, len(allItems))
 	for _, item := range allItems {
-		if item.Snippet != nil && item.Snippet.Localized != nil {
-			playlists = append(playlists, *models.NewPlaylist(item.Id, item.Snippet.Localized.Title))
-		} else if item.Snippet != nil {
-			playlists = append(playlists, *models.NewPlaylist(item.Id, item.Snippet.Title))
+		pl := models.NewPlaylist(item.Id, "")
+		if item.Snippet != nil {
+			if item.Snippet.Localized != nil {
+				pl.Title = item.Snippet.Localized.Title
+			} else {
+				pl.Title = item.Snippet.Title
+			}
 		}
+		if item.ContentDetails != nil {
+			pl.ItemCount = int(item.ContentDetails.ItemCount)
+		}
+		playlists = append(playlists, *pl)
 	}
 	return playlists, nil
 }

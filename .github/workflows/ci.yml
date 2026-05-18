@@ -1,0 +1,19 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+      - run: go mod download
+      - run: go vet -tags "sqlite_fts5" ./...
+      - run: go test -tags "sqlite_fts5" -v ./...

@@ -1,9 +1,10 @@
 package models
 
 type Playlist struct {
-	ID    string
-	Title string
-	Items []PlayListItem
+	ID        string
+	Title     string
+	Items     []PlayListItem
+	ItemCount int
 }
 
 func NewPlaylist(id, title string) *Playlist {

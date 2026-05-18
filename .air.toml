@@ -1,0 +1,24 @@
+root = "."
+testdata_dir = "testdata"
+tmp_dir = "tmp"
+
+[build]
+  bin = "./ypr-server"
+  cmd = "go build -o ./ypr-server ."
+  delay = 1000
+  exclude_dir = ["assets", "tmp", "testdata"]
+  include_ext = ["go", "tmpl", "html", "css", "js"]
+  log = "build-errors.log"
+  rerun_delay = 500
+
+[color]
+  build = "yellow"
+  main = "magenta"
+  runner = "green"
+  watcher = "cyan"
+
+[misc]
+  clean_on_exit = false
+
+[screen]
+  keep_scroll = true
