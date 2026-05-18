@@ -1,0 +1,190 @@
+package main
+
+import (
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+
+	"github.com/martynvdijke/youtube-playlist-randomizer/internal/store"
+)
+
+func TestWriteQuotaPct(t *testing.T) {
+	tests := []struct {
+		used       int
+		limit      int
+		wantPct    float64
+		wantClass  string
+		classCheck func(string) bool
+	}{
+		{0, 100, 0, "quota-fill", func(s string) bool { return s == "quota-fill" }},
+		{10, 100, 10, "quota-fill", func(s string) bool { return s == "quota-fill" }},
+		{60, 100, 60, "quota-fill", func(s string) bool { return strings.Contains(s, "quota-warning") }},
+		{90, 100, 90, "quota-fill", func(s string) bool { return strings.Contains(s, "quota-critical") }},
+		{0, 0, 0, "quota-fill", func(s string) bool { return s == "quota-fill" }},
+		{100, 100, 100, "quota-fill", func(s string) bool { return strings.Contains(s, "quota-critical") }},
+	}
+
+	for _, tc := range tests {
+		pct, class := writeQuotaPct(tc.used, tc.limit)
+		if pct != tc.wantPct {
+			t.Errorf("writeQuotaPct(%d, %d) pct = %f, want %f", tc.used, tc.limit, pct, tc.wantPct)
+		}
+		if !tc.classCheck(class) {
+			t.Errorf("writeQuotaPct(%d, %d) class = %q, does not satisfy check", tc.used, tc.limit, class)
+		}
+	}
+}
+
+func TestQuotaCostClass(t *testing.T) {
+	sufficient := &store.QuotaInfo{Remaining: 100}
+	insufficient := &store.QuotaInfo{Remaining: 5}
+
+	tests := []struct {
+		name   string
+		quota  *store.QuotaInfo
+		cost   int
+		want   string
+	}{
+		{"nil quota", nil, 10, "quota-cost quota-low"},
+		{"sufficient", sufficient, 10, "quota-cost quota-ok"},
+		{"exact sufficient", sufficient, 100, "quota-cost quota-ok"},
+		{"insufficient", insufficient, 10, "quota-cost quota-low"},
+		{"zero cost nil", nil, 0, "quota-cost quota-low"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := quotaCostClass(tc.quota, tc.cost)
+			if got != tc.want {
+				t.Errorf("quotaCostClass() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestQuotaText(t *testing.T) {
+	sufficient := &store.QuotaInfo{Remaining: 100}
+	insufficient := &store.QuotaInfo{Remaining: 5}
+
+	tests := []struct {
+		name   string
+		quota  *store.QuotaInfo
+		cost   int
+		want   string
+	}{
+		{"nil quota", nil, 10, "Unknown"},
+		{"sufficient", sufficient, 10, "Sufficient"},
+		{"exact sufficient", sufficient, 100, "Sufficient"},
+		{"insufficient", insufficient, 10, "Insufficient"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := quotaText(tc.quota, tc.cost)
+			if got != tc.want {
+				t.Errorf("quotaText() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCorsMiddleware(t *testing.T) {
+	handler := corsMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("ok"))
+	}))
+
+	tests := []struct {
+		name       string
+		method     string
+		wantStatus int
+		wantBody   string
+		wantOrigin string
+	}{
+		{"GET request", "GET", http.StatusOK, "ok", "*"},
+		{"OPTIONS request", "OPTIONS", http.StatusOK, "", "*"},
+		{"POST request", "POST", http.StatusOK, "ok", "*"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(tc.method, "/test", nil)
+			rr := httptest.NewRecorder()
+			handler.ServeHTTP(rr, req)
+
+			if rr.Code != tc.wantStatus {
+				t.Errorf("expected status %d, got %d", tc.wantStatus, rr.Code)
+			}
+			if rr.Body.String() != tc.wantBody {
+				t.Errorf("expected body %q, got %q", tc.wantBody, rr.Body.String())
+			}
+			origin := rr.Header().Get("Access-Control-Allow-Origin")
+			if origin != tc.wantOrigin {
+				t.Errorf("expected Access-Control-Allow-Origin %q, got %q", tc.wantOrigin, origin)
+			}
+		})
+	}
+}
+
+func TestWriteJSON(t *testing.T) {
+	rr := httptest.NewRecorder()
+	writeJSON(rr, http.StatusCreated, map[string]string{"key": "value"})
+
+	if rr.Code != http.StatusCreated {
+		t.Errorf("expected status %d, got %d", http.StatusCreated, rr.Code)
+	}
+	ct := rr.Header().Get("Content-Type")
+	if ct != "application/json" {
+		t.Errorf("expected Content-Type application/json, got %q", ct)
+	}
+	body := strings.TrimSpace(rr.Body.String())
+	if !strings.Contains(body, `"key":"value"`) {
+		t.Errorf("expected body to contain key:value, got %q", body)
+	}
+}
+
+func TestWriteError(t *testing.T) {
+	rr := httptest.NewRecorder()
+	writeError(rr, http.StatusBadRequest, "invalid request")
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d", http.StatusBadRequest, rr.Code)
+	}
+	body := strings.TrimSpace(rr.Body.String())
+	if !strings.Contains(body, `"error":"invalid request"`) {
+		t.Errorf("expected error body, got %q", body)
+	}
+}
+
+func TestFindClientSecret(t *testing.T) {
+	t.Run("finds existing file", func(t *testing.T) {
+		path := findClientSecret()
+		if path == "" {
+			t.Error("expected non-empty path")
+		}
+	})
+}
+
+func TestVersionConstant(t *testing.T) {
+	if version != "1.0.0" {
+		t.Errorf("expected version '1.0.0', got %q", version)
+	}
+}
+
+func TestJobStatusConstants(t *testing.T) {
+	expected := map[JobStatus]bool{
+		JobPending:   true,
+		JobFetching:  true,
+		JobShuffling: true,
+		JobInserting: true,
+		JobDone:      true,
+		JobError:     true,
+		JobPaused:    true,
+	}
+	for status := range expected {
+		if _, ok := expected[status]; !ok {
+			t.Errorf("unexpected job status: %s", status)
+		}
+	}
+}
