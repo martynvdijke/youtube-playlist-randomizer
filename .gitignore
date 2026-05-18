@@ -2,7 +2,9 @@
 client_secret.json
 token.json
 
-# Python (legacy)
+# Ignore all JSON files except swagger spec
+*.json
+!static/swagger.json
 venvyoutube/*
 test.py
 .tox/*

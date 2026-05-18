@@ -1,0 +1,429 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "YouTube Playlist Randomizer",
+    "description": "A tool to randomize YouTube playlists. Uses the YouTube Data API v3 to list playlists, retrieve playlist items, create new playlists, and populate them with shuffled videos.\n\n## Authentication\nAll API operations require OAuth 2.0 authentication with the `https://www.googleapis.com/auth/youtube.force-ssl` scope. The tool uses the installed application OAuth flow via `google_auth_oauthlib`.\n\n## Rate Limiting\nThe YouTube Data API has quota limits. Playlist item insertion is rate-limited to approximately 1 request per 100ms, with a cooldown of ~25 hours after `chunks` (default 500) insertions.",
+    "version": "0.5.2",
+    "contact": {
+      "name": "Martyn van Dijke",
+      "email": "martijnvdijke600@gmail.com"
+    },
+    "license": {
+      "name": "MIT",
+      "url": "https://opensource.org/licenses/MIT"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://www.googleapis.com/youtube/v3",
+      "description": "YouTube Data API v3"
+    }
+  ],
+  "paths": {
+    "/playlists": {
+      "get": {
+        "summary": "List authenticated user's playlists",
+        "description": "Retrieves all playlists owned by the authenticated user with pagination support.",
+        "operationId": "listPlaylists",
+        "tags": ["Playlists"],
+        "security": [{ "OAuth2": ["https://www.googleapis.com/auth/youtube.force-ssl"] }],
+        "parameters": [
+          {
+            "name": "part",
+            "in": "query",
+            "description": "Comma-separated list of one or more playlist resource properties.",
+            "required": true,
+            "schema": { "type": "string", "default": "snippet" }
+          },
+          {
+            "name": "mine",
+            "in": "query",
+            "description": "Flag to retrieve only the authenticated user's playlists.",
+            "required": true,
+            "schema": { "type": "boolean", "default": true }
+          },
+          {
+            "name": "pageToken",
+            "in": "query",
+            "description": "Token for pagination to retrieve the next page of results.",
+            "required": false,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "maxResults",
+            "in": "query",
+            "description": "Maximum number of items to return per page.",
+            "required": false,
+            "schema": { "type": "integer", "default": 50 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response with playlist list",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PlaylistListResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      },
+      "post": {
+        "summary": "Create a new playlist",
+        "description": "Creates a new YouTube playlist with the specified title. The randomized playlist is created with the pattern `<original-title>-randomized-<Month-Year>`.",
+        "operationId": "createPlaylist",
+        "tags": ["Playlists"],
+        "security": [{ "OAuth2": ["https://www.googleapis.com/auth/youtube.force-ssl"] }],
+        "parameters": [
+          {
+            "name": "part",
+            "in": "query",
+            "description": "Comma-separated list of properties to include.",
+            "required": true,
+            "schema": { "type": "string", "default": "snippet,status" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PlaylistInsertRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Playlist created successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PlaylistResource" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/playlistItems": {
+      "get": {
+        "summary": "List items in a playlist",
+        "description": "Retrieves all items (videos) in a specified playlist with pagination support.",
+        "operationId": "listPlaylistItems",
+        "tags": ["Playlist Items"],
+        "security": [{ "OAuth2": ["https://www.googleapis.com/auth/youtube.force-ssl"] }],
+        "parameters": [
+          {
+            "name": "part",
+            "in": "query",
+            "description": "Comma-separated list of properties to include.",
+            "required": true,
+            "schema": { "type": "string", "default": "snippet" }
+          },
+          {
+            "name": "playlistId",
+            "in": "query",
+            "description": "The ID of the playlist whose items to retrieve.",
+            "required": true,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "pageToken",
+            "in": "query",
+            "description": "Token for pagination to retrieve the next page of results.",
+            "required": false,
+            "schema": { "type": "string" }
+          },
+          {
+            "name": "maxResults",
+            "in": "query",
+            "description": "Maximum number of items to return per page.",
+            "required": false,
+            "schema": { "type": "integer", "default": 50 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response with playlist items",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PlaylistItemListResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "post": {
+        "summary": "Insert an item into a playlist",
+        "description": "Adds a video to a playlist. Used during the randomization process to populate the new shuffled playlist.",
+        "operationId": "insertPlaylistItem",
+        "tags": ["Playlist Items"],
+        "security": [{ "OAuth2": ["https://www.googleapis.com/auth/youtube.force-ssl"] }],
+        "parameters": [
+          {
+            "name": "part",
+            "in": "query",
+            "description": "Comma-separated list of properties to include.",
+            "required": true,
+            "schema": { "type": "string", "default": "snippet" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/PlaylistItemInsertRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Item inserted successfully",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PlaylistItemResource" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "OAuth2": {
+        "type": "oauth2",
+        "description": "OAuth 2.0 with the YouTube Force SSL scope.",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "https://accounts.google.com/o/oauth2/auth",
+            "tokenUrl": "https://oauth2.googleapis.com/token",
+            "scopes": {
+              "https://www.googleapis.com/auth/youtube.force-ssl": "Full access to YouTube account"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "PlaylistListResponse": {
+        "type": "object",
+        "properties": {
+          "kind": { "type": "string", "example": "youtube#playlistListResponse" },
+          "etag": { "type": "string" },
+          "nextPageToken": { "type": "string" },
+          "prevPageToken": { "type": "string" },
+          "pageInfo": {
+            "type": "object",
+            "properties": {
+              "totalResults": { "type": "integer" },
+              "resultsPerPage": { "type": "integer" }
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/PlaylistResource" }
+          }
+        }
+      },
+      "PlaylistResource": {
+        "type": "object",
+        "properties": {
+          "kind": { "type": "string", "example": "youtube#playlist" },
+          "etag": { "type": "string" },
+          "id": { "type": "string" },
+          "snippet": {
+            "type": "object",
+            "properties": {
+              "publishedAt": { "type": "string", "format": "date-time" },
+              "channelId": { "type": "string" },
+              "title": { "type": "string" },
+              "description": { "type": "string" },
+              "localized": {
+                "type": "object",
+                "properties": {
+                  "title": { "type": "string" },
+                  "description": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "PlaylistInsertRequest": {
+        "type": "object",
+        "required": ["snippet"],
+        "properties": {
+          "snippet": {
+            "type": "object",
+            "required": ["title"],
+            "properties": {
+              "title": { "type": "string", "description": "Playlist title" }
+            }
+          }
+        }
+      },
+      "PlaylistItemListResponse": {
+        "type": "object",
+        "properties": {
+          "kind": { "type": "string", "example": "youtube#playlistItemListResponse" },
+          "etag": { "type": "string" },
+          "nextPageToken": { "type": "string" },
+          "prevPageToken": { "type": "string" },
+          "pageInfo": {
+            "type": "object",
+            "properties": {
+              "totalResults": { "type": "integer" },
+              "resultsPerPage": { "type": "integer" }
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/PlaylistItemResource" }
+          }
+        }
+      },
+      "PlaylistItemResource": {
+        "type": "object",
+        "properties": {
+          "kind": { "type": "string", "example": "youtube#playlistItem" },
+          "etag": { "type": "string" },
+          "id": { "type": "string" },
+          "snippet": {
+            "type": "object",
+            "properties": {
+              "publishedAt": { "type": "string", "format": "date-time" },
+              "channelId": { "type": "string" },
+              "title": { "type": "string" },
+              "description": { "type": "string" },
+              "playlistId": { "type": "string" },
+              "position": { "type": "integer" },
+              "resourceId": {
+                "type": "object",
+                "properties": {
+                  "kind": { "type": "string", "example": "youtube#video" },
+                  "videoId": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      },
+      "PlaylistItemInsertRequest": {
+        "type": "object",
+        "required": ["snippet"],
+        "properties": {
+          "snippet": {
+            "type": "object",
+            "required": ["playlistId", "position", "resourceId"],
+            "properties": {
+              "playlistId": {
+                "type": "string",
+                "description": "ID of the playlist to insert the item into"
+              },
+              "position": {
+                "type": "integer",
+                "description": "Position (index) of the item in the playlist"
+              },
+              "resourceId": {
+                "type": "object",
+                "required": ["kind", "videoId"],
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": ["youtube#video"],
+                    "description": "The kind of resource to insert"
+                  },
+                  "videoId": {
+                    "type": "string",
+                    "description": "YouTube video ID"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "integer" },
+              "message": { "type": "string" },
+              "errors": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "message": { "type": "string" },
+                    "domain": { "type": "string" },
+                    "reason": { "type": "string" },
+                    "location": { "type": "string" },
+                    "locationType": { "type": "string" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "Authentication required or invalid credentials.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Insufficient permissions to perform the operation.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "The requested resource was not found.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+          }
+        }
+      }
+    }
+  },
+  "x-cli-info": {
+    "name": "youtube-playlist-randomizer",
+    "description": "CLI tool to randomize YouTube playlists",
+    "commands": {
+      "ypr": {
+        "description": "Run the playlist randomizer",
+        "arguments": {
+          "input": {
+            "description": "Path to the OAuth client secrets JSON file",
+            "type": "string",
+            "default": "client_secret.json"
+          },
+          "chunks": {
+            "description": "Number of playlist insertions before the 25-hour rate limit cooldown",
+            "type": "integer",
+            "default": 500
+          }
+        }
+      }
+    }
+  }
+}
