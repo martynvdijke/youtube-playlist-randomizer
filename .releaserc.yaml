@@ -1,18 +1,31 @@
 plugins:
-  - "@semantic-release/commit-analyzer"
+  - [
+      "@semantic-release/commit-analyzer",
+      {
+        "releaseRules": [
+          { "type": "chore", "scope": "deps", "release": "patch" },
+          { "type": "chore", "scope": "dependencies", "release": "patch" },
+          { "type": "refactor", "release": "patch" },
+          { "type": "style", "release": "patch" }
+        ]
+      }
+    ]
   - "@semantic-release/release-notes-generator"
   - "@semantic-release/changelog"
-  - - "@semantic-release/exec"
-    - prepareCmd: |
-        sed -i "s/^version = \".*\"/version = \"${nextRelease.version}\"/" pyproject.toml
-        sed -i "s/^__version__ = \".*\"/__version__ = \"${nextRelease.version}\"/" youtube_playlist_randomizer/__init__.py
-  - - "@semantic-release/git"
-    - assets:
-        - pyproject.toml
-        - youtube_playlist_randomizer/__init__.py
-        - CHANGELOG.md
+  - [
+      "@semantic-release/exec",
+      {
+        prepareCmd: "sed -i 's/\"version\": \".*\"/\"version\": \"${nextRelease.version}\"/' package.json && sed -i 's/const version = \".*\"/const version = \"${nextRelease.version}\"/' main.go && sed -i 's/\"version\": \".*\"/\"version\": \"${nextRelease.version}\"/' static/swagger.json"
+      }
+    ]
+  - [
+      "@semantic-release/git",
+      {
+        message: "chore(release): ${nextRelease.version} [skip ci]\n\n${nextRelease.notes}",
+        assets: ["CHANGELOG.md", "package.json", "main.go", "static/swagger.json"],
+      },
+    ]
   - "@semantic-release/github"
 
 branches:
-  - "+([0-9])?(.{+([0-9]),x}).x"
   - main
