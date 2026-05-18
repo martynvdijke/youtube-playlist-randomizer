@@ -1,21 +1,39 @@
-*.json
+# Secrets
+client_secret.json
+token.json
+
+# Python (legacy)
 venvyoutube/*
-dist/*
-dist/*
-*.tar.gz
 test.py
 .tox/*
 .installed.cfg
 bin
 develop-eggs
-dist
 downloads
 eggs
 parts
-src/*.egg-info
 lib
 lib64
 *.pyc
 *.pyo
-youtube_playlist_randomizer/__pycache_/*
+youtube_playlist_randomizer/__pycache__/*
 poetry.lock
+requirements.txt
+
+# Build artifacts
+dist/*
+*.tar.gz
+ypr-server
+tmp/
+node_modules/
+
+# Test output
+playwright-report/
+test-results/
+
+# Database
+ypr.db
+
+# OS
+.DS_Store
+Thumbs.db

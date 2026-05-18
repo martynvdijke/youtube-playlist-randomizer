@@ -1,41 +1,67 @@
-name: CI
+name: CI checks
 
 on:
+  workflow_call:
   push:
-    branches:
-      - main
+    branches-ignore:
+      - 'main'
   pull_request:
     branches:
-      - main
+      - "**"
 
 jobs:
-  lint-and-test:
+  ci:
     runs-on: ubuntu-latest
 
-    strategy:
-      matrix:
-        python-version: ['3.10', '3.11', '3.12', '3.13']
+    permissions:
+      contents: write
+      pull-requests: write
+      packages: write
+      attestations: write
+      id-token: write
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - name: Checkout Repository
+        uses: actions/checkout@v6
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - name: Set up Go
+        uses: actions/setup-go@v6
         with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install Poetry
-        run: pip install poetry
-
-      - name: Configure Poetry to use the same Python version as setup-python
-        run: poetry env use $(python -c "import sys; print(sys.executable)")
+          go-version: '1.26.3'
 
       - name: Install dependencies
-        run: poetry install
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev gcc
 
-      - name: Run ruff
-        run: poetry run ruff check .
+      - name: Download dependencies
+        run: go mod download
 
-      - name: Run tests
-        run: poetry run pytest
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: 'npm'
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Build TypeScript
+        run: npx tsc
+
+      - name: Run Tests
+        run: go test -v ./...
+
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps chromium firefox
+
+      - name: Build server binary
+        run: CGO_ENABLED=1 go build -o ypr-server .
+
+      - name: Run Playwright tests
+        run: npm run test:e2e
+
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 30
