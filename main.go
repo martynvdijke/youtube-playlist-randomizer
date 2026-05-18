@@ -107,6 +107,7 @@ func main() {
 	input := flag.String("i", "", "Client secret JSON file path")
 	showVersion := flag.Bool("version", false, "Print version")
 	dataDirFlag := flag.String("d", ".", "Data directory for DB and cached token")
+	mockMode := flag.Bool("mock", false, "Run in mock mode (no YouTube API credentials needed)")
 
 	flag.Parse()
 
@@ -117,11 +118,6 @@ func main() {
 
 	dataDir = *dataDirFlag
 
-	secretPath := *input
-	if secretPath == "" {
-		secretPath = findClientSecret()
-	}
-
 	dbPath := filepath.Join(dataDir, "ypr.db")
 	var err error
 	db, err = store.Open(dbPath)
@@ -130,60 +126,71 @@ func main() {
 	}
 	defer db.Close()
 
+	ctx := context.Background()
+
+	if *mockMode {
+		log.Println("Running in mock mode (no YouTube API)")
+		ytClient = nil
+	} else {
+		secretPath := *input
+		if secretPath == "" {
+			secretPath = findClientSecret()
+		}
+
+		ytClient, err = youtube.NewClient(ctx, secretPath, dataDir)
+		if err != nil {
+			log.Fatalf("Failed to create YouTube client: %v", err)
+		}
+
+		if _, err := db.AddQuota(store.QuotaListPlaylists); err != nil {
+			log.Printf("warning: failed to track quota: %v", err)
+		}
+	}
+
 	quota, err := db.GetQuota()
 	if err != nil {
 		log.Fatalf("Failed to get quota: %v", err)
 	}
-
 	printQuotaBanner(quota)
 
-	ctx := context.Background()
-
-	ytClient, err = youtube.NewClient(ctx, secretPath, dataDir)
-	if err != nil {
-		log.Fatalf("Failed to create YouTube client: %v", err)
-	}
-
-	if _, err := db.AddQuota(store.QuotaListPlaylists); err != nil {
-		log.Printf("warning: failed to track quota: %v", err)
-	}
-
-	pausedJobs, err := db.GetPendingJobs()
-	if err != nil {
-		log.Printf("warning: failed to check for pending jobs: %v", err)
-	}
-
-	for _, j := range pausedJobs {
-		fmt.Printf("\nFound paused job: %s -> %s (%d/%d items)\n",
-			j.SourceTitle, j.NewName, j.InsertedItems, j.TotalItems)
-
-		quota, err := db.GetQuota()
+	if !*mockMode {
+		pausedJobs, err := db.GetPendingJobs()
 		if err != nil {
-			log.Printf("warning: skipping resume, quota check failed: %v", err)
-			continue
+			log.Printf("warning: failed to check for pending jobs: %v", err)
 		}
 
-		remainingItems := j.TotalItems - j.InsertedItems
-		needed := db.EstimateQuotaNeeded(remainingItems)
+		for _, j := range pausedJobs {
+			fmt.Printf("\nFound paused job: %s -> %s (%d/%d items)\n",
+				j.SourceTitle, j.NewName, j.InsertedItems, j.TotalItems)
 
-		if needed > quota.Remaining {
-			log.Printf("Insufficient quota to resume job %s: need %d, have %d", j.ID, needed, quota.Remaining)
-			continue
+			quota, err := db.GetQuota()
+			if err != nil {
+				log.Printf("warning: skipping resume, quota check failed: %v", err)
+				continue
+			}
+
+			remainingItems := j.TotalItems - j.InsertedItems
+			needed := db.EstimateQuotaNeeded(remainingItems)
+
+			if needed > quota.Remaining {
+				log.Printf("Insufficient quota to resume job %s: need %d, have %d", j.ID, needed, quota.Remaining)
+				continue
+			}
+
+			fmt.Printf("Resuming job %s (%d items remaining, ~%d quota needed, %d remaining)...\n",
+				j.ID, remainingItems, needed, quota.Remaining)
+
+			jobsMu.Lock()
+			jp := &jobProgress{
+				Status:        JobInserting,
+				Total:         j.TotalItems,
+				Done:          j.InsertedItems,
+				NewPlaylistID: j.NewPlaylistID,
+			}
+			jobsMu.Unlock()
+
+			go resumeJob(ctx, j, jp)
 		}
-
-		fmt.Printf("Resuming job %s (%d items remaining, ~%d quota needed, %d remaining)...\n",
-			j.ID, remainingItems, needed, quota.Remaining)
-
-		jobsMu.Lock()
-		jp := &jobProgress{
-			Status:        JobInserting,
-			Total:         j.TotalItems,
-			Done:          j.InsertedItems,
-			NewPlaylistID: j.NewPlaylistID,
-		}
-		jobsMu.Unlock()
-
-		go resumeJob(ctx, j, jp)
 	}
 
 	mux := http.NewServeMux()
@@ -275,6 +282,11 @@ func handlePlaylists(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if ytClient == nil {
+		writeJSON(w, http.StatusOK, []PlaylistResponse{})
+		return
+	}
+
 	playlists, err := ytClient.GetPlaylists(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -300,6 +312,11 @@ func handlePlaylists(w http.ResponseWriter, r *http.Request) {
 func handleRandomize(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	if ytClient == nil {
+		writeError(w, http.StatusBadRequest, "YouTube API not available in mock mode")
 		return
 	}
 

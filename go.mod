@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	golang.org/x/oauth2 v0.36.0
 	google.golang.org/api v0.279.0
+	modernc.org/sqlite v1.50.1
 )
 
 require (
@@ -38,5 +39,4 @@ require (
 	modernc.org/libc v1.72.3 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
-	modernc.org/sqlite v1.50.1 // indirect
 )
