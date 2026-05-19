@@ -1,3 +1,10 @@
+## [1.1.2](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.1.1...v1.1.2) (2026-05-19)
+
+
+### Bug Fixes
+
+* docker build ([356462d](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/356462d225fda7543a76f368c2756f9af4748ea1))
+
 ## [1.1.1](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.1.0...v1.1.1) (2026-05-18)
 
 

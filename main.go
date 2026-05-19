@@ -23,7 +23,7 @@ import (
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/youtube"
 )
 
-const version = "1.1.1"
+const version = "1.1.2"
 
 type JobStatus string
 
