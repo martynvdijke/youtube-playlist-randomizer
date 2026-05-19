@@ -86,6 +86,15 @@ var (
 )
 
 func findClientSecret() string {
+	if os.Getenv("DOCKER") == "true" {
+		paths := []string{"/app/client_secret.json", "client_secret.json"}
+		for _, p := range paths {
+			if _, err := os.Stat(p); err == nil {
+				return p
+			}
+		}
+		return "/app/client_secret.json"
+	}
 	paths := []string{"client_secret.json", "/app/client_secret.json"}
 	for _, p := range paths {
 		if _, err := os.Stat(p); err == nil {
@@ -93,6 +102,13 @@ func findClientSecret() string {
 		}
 	}
 	return "client_secret.json"
+}
+
+func defaultDataDir() string {
+	if os.Getenv("DOCKER") == "true" {
+		return "/db"
+	}
+	return "."
 }
 
 func printQuotaBanner(q *store.QuotaInfo) {
@@ -113,7 +129,7 @@ func main() {
 	port := flag.Int("p", 6270, "Port to listen on")
 	input := flag.String("i", "", "Client secret JSON file path")
 	showVersion := flag.Bool("version", false, "Print version")
-	dataDirFlag := flag.String("d", ".", "Data directory for DB and cached token")
+	dataDirFlag := flag.String("d", defaultDataDir(), "Data directory for DB and cached token")
 	mockMode := flag.Bool("mock", false, "Run in mock mode (no YouTube API credentials needed)")
 
 	flag.Parse()
