@@ -33,4 +33,4 @@ RUN mkdir -p /db /app/media /config && chmod 777 /db /app/media /config
 
 EXPOSE 6270
 
-CMD ["./ypr-server", "--mock"]
+CMD ["./ypr-server"]
