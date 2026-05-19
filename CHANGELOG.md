@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.4.0...v1.5.0) (2026-05-19)
+
+
+### Features
+
+* add logo and version badge to header ([df74556](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/df745561f6e5dff17f68a649ed98919d3dec31fd))
+
 # [1.4.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.3.0...v1.4.0) (2026-05-19)
 
 
