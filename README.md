@@ -1,58 +1,98 @@
 # youtube-playlist-randomizer
 
-> Takes a youtube list shuffles it around and saves it as a new playlist
+> Takes a YouTube playlist, shuffles it, and saves it as a new playlist
 
-[![PyPI Version][pypi-image]][pypi-url]
-<!-- [![Build Status][build-image]][build-url] -->
+[![Go Version](https://img.shields.io/github/go-mod/go-version/martynvdijke/youtube-playlist-randomizer)](https://github.com/martynvdijke/youtube-playlist-randomizer)
 
-## Summary
+Since the Chromecast cannot shuffle a YouTube playlist, this tool provides a web UI to randomize your playlists via the YouTube Data API v3.
 
-Since the Chromecast can not shuffle an youtube list, and I sometimes want to just lay back and watch my favourite playlist in random order i came up with this package.
-This is a simple python package that takes a youtube playlist as input randomizes it and saves the youtube playlist.
+## Features
 
-## Installation
+- **Web UI** — HTMX-powered interface to browse, filter, and randomize playlists
+- **Quota management** — Tracks YouTube API quota usage and auto-pauses/resumes jobs when quota resets
+- **Job persistence** — SQLite-backed job state survives server restarts
+- **Docker support** — Ready-to-run container image
+- **Mock mode** — Run without YouTube API credentials for development
 
-```sh
-pip install youtube-playlist-randomizer
-```
+## Quick Start
 
-### CLI Documentation
+### Prerequisites
 
-```python
-Playlist randomizer
+1. A [Google Cloud project](https://developers.google.com/youtube/v3/quickstart/go) with the YouTube Data API v3 enabled
+2. An OAuth 2.0 client ID for a desktop application (download as `client_secret.json`)
 
-options:
-  -h, --help            show this help message and exit
-  --version             show program's version number and exit
-  -v, --verbose         set loglevel to INFO
-  -vv, --very-verbose   set loglevel to DEBUG
-  -n CHUNKS, --number_of CHUNKS
-                        Specify the number of update request to do per 24 hours [default=190]
-  -i INPUT, --input INPUT
-                        Specify the secret client json file [default='client_secret.json']
-```
-
-### Config
-
-This scripts needs a client_secret.json file you can get one by going to
-[google docs](https://developers.google.com/youtube/v3/quickstart/python)
-and follow step 1 of that tutorial and save the client_secret.json to disk.
-
-## Usage
-
-After installing and getting the client secret file just run and follow the instructions in the folder you saved the json file.
+### Using Docker
 
 ```sh
-youtube-playlist-randomizer -i client_secret.json
+docker run -p 6270:6270 \
+  -v /path/to/client_secret.json:/app/client_secret.json \
+  -v ypr-data:/db \
+  ghcr.io/martynvdijke/ypr:latest
 ```
+
+### From Source
+
+```sh
+go build -o ypr-server .
+./ypr-server -i client_secret.json
+```
+
+Open http://localhost:6270 and authorize with your Google account.
+
+## CLI Options
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-p` | `6270` | Port to listen on |
+| `-i` | `client_secret.json` | Path to OAuth client secret JSON |
+| `-d` | `.` | Data directory for DB and cached token |
+| `-mock` | `false` | Run in mock mode (no YouTube API) |
+| `-version` | | Print version and exit |
+
+## Development
+
+```sh
+# Build and run
+go build -o ypr-server .
+./ypr-server -mock
+
+# With hot reload (requires air)
+air -c .air.toml
+
+# Build TypeScript
+npx tsc
+
+# Run tests
+go test -v ./...
+npx playwright test
+
+# Lint
+go vet ./...
+```
+
+## API
+
+The server exposes REST endpoints under `/api/`:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/quota` | GET | Current API quota usage |
+| `/api/playlists` | GET | List user's playlists |
+| `/api/randomize` | POST | Start a randomize job |
+| `/api/jobs/{id}` | GET | Job status |
+
+See [static/swagger.json](static/swagger.json) for the full API specification.
+
+## How it works
+
+1. Lists your YouTube playlists via the Data API
+2. Fetches all video IDs from the selected playlist
+3. Shuffles them using Fisher-Yates algorithm
+4. Creates a new playlist with the shuffled order
+5. Inserts items with automatic pause/resume when API quota is exhausted
 
 ## [Changelog](CHANGELOG.md)
 
 ## License
 
 [MIT](https://choosealicense.com/licenses/mit/)
-
-<!-- Badges -->
-
-[pypi-image]: https://img.shields.io/pypi/v/youtube-playlist-randomizer
-[pypi-url]: https://pypi.org/project/youtube-playlist-randomizer
