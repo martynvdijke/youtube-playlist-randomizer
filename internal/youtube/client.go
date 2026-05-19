@@ -236,14 +236,28 @@ func getTokenFromWeb(config *oauth2.Config) (*oauth2.Token, error) {
 }
 
 func getTokenViaLocalServer(config *oauth2.Config, preferredPort int) (*oauth2.Token, error) {
-	listener, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", preferredPort))
-	if err != nil {
-		return nil, fmt.Errorf("unable to listen on port %d: %w", preferredPort, err)
+	callbackURL := os.Getenv("OAUTH_CALLBACK_URL")
+
+	var listener net.Listener
+	var err error
+	var redirectURL string
+
+	if callbackURL != "" {
+		listener, err = net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", preferredPort))
+		if err != nil {
+			return nil, fmt.Errorf("unable to listen on port %d: %w", preferredPort, err)
+		}
+		redirectURL = callbackURL
+	} else {
+		listener, err = net.Listen("tcp", fmt.Sprintf("localhost:%d", preferredPort))
+		if err != nil {
+			return nil, fmt.Errorf("unable to listen on port %d: %w", preferredPort, err)
+		}
+		port := listener.Addr().(*net.TCPAddr).Port
+		redirectURL = fmt.Sprintf("http://localhost:%d/callback", port)
 	}
 	defer listener.Close()
 
-	port := listener.Addr().(*net.TCPAddr).Port
-	redirectURL := fmt.Sprintf("http://localhost:%d/callback", port)
 	config.RedirectURL = redirectURL
 
 	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)

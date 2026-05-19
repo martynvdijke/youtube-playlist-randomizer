@@ -25,6 +25,7 @@ Since the Chromecast cannot shuffle a YouTube playlist, this tool provides a web
 
 ```sh
 docker run -p 6270:6270 \
+  -e OAUTH_CALLBACK_URL=http://localhost:6270/callback \
   -v /path/to/client_secret.json:/config/client_secret.json \
   -v ypr-data:/db \
   ghcr.io/martynvdijke/ypr:latest
@@ -48,6 +49,16 @@ Open http://localhost:6270 and authorize with your Google account.
 | `-d` | `.` | Data directory for DB and cached token |
 | `-mock` | `false` | Run in mock mode (no YouTube API) |
 | `-version` | | Print version and exit |
+
+## Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `DOCKER` | `false` | Toggles Docker-specific paths and OAuth port behaviour |
+| `PORT` | `6270` | OAuth callback port (used when `DOCKER=true`) |
+| `OAUTH_CALLBACK_URL` | — | Custom OAuth redirect URL. Set to an HTTP address (e.g. `http://localhost:6270/callback`) when the callback server must be reachable from outside the container. The listener binds to `0.0.0.0` so the port must be mapped. |
+| `OTEL_SERVICE_NAME` | `youtube-playlist-randomizer` | OpenTelemetry service name |
+| `VERSION` | — | Override version reported in telemetry |
 
 ## Development
 
