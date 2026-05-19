@@ -25,7 +25,7 @@ Since the Chromecast cannot shuffle a YouTube playlist, this tool provides a web
 
 ```sh
 docker run -p 6270:6270 \
-  -v /path/to/client_secret.json:/app/client_secret.json \
+  -v /path/to/client_secret.json:/config/client_secret.json \
   -v ypr-data:/db \
   ghcr.io/martynvdijke/ypr:latest
 ```

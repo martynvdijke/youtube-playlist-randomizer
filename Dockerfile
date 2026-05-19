@@ -29,7 +29,7 @@ COPY --from=builder /app/ypr-server .
 COPY --from=builder /app/static ./static
 COPY --from=ts-builder /app/static/js ./static/js
 
-RUN mkdir -p /db /app/media && chmod 777 /db /app/media
+RUN mkdir -p /db /app/media /config && chmod 777 /db /app/media /config
 
 EXPOSE 6270
 

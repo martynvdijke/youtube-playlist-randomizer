@@ -87,15 +87,15 @@ var (
 
 func findClientSecret() string {
 	if os.Getenv("DOCKER") == "true" {
-		paths := []string{"/app/client_secret.json", "client_secret.json"}
+		paths := []string{"/config/client_secret.json", "client_secret.json"}
 		for _, p := range paths {
 			if _, err := os.Stat(p); err == nil {
 				return p
 			}
 		}
-		return "/app/client_secret.json"
+		return "/config/client_secret.json"
 	}
-	paths := []string{"client_secret.json", "/app/client_secret.json"}
+	paths := []string{"client_secret.json", "/config/client_secret.json"}
 	for _, p := range paths {
 		if _, err := os.Stat(p); err == nil {
 			return p
