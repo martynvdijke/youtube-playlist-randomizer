@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.2.2...v1.3.0) (2026-05-19)
+
+
+### Features
+
+* add OAUTH_CALLBACK_URL env var for Docker callback support ([dce2cbf](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/dce2cbf742b2dab9b9c4b0c6b3eb5e42a05fbb6c))
+
 ## [1.2.2](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.2.1...v1.2.2) (2026-05-19)
 
 
