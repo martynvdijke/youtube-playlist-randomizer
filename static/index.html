@@ -10,7 +10,13 @@
 </head>
 <body>
 <header>
-  <h1>YouTube Playlist Randomizer</h1>
+  <div class="header-top">
+    <img src="/static/logo.svg" alt="Logo" class="logo">
+    <div class="header-title-group">
+      <h1>YouTube Playlist Randomizer</h1>
+      <span class="version-badge">v1.2.1</span>
+    </div>
+  </div>
   <div id="quota-bar" class="quota-bar" hx-get="/api/quota/html" hx-trigger="load, every 30s" hx-swap="innerHTML">
     <div class="quota-label"><span>Quota: --</span></div>
     <div class="quota-track">
