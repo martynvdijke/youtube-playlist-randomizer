@@ -1,3 +1,10 @@
+## [1.2.1](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.2.0...v1.2.1) (2026-05-19)
+
+
+### Bug Fixes
+
+* auto-detect Docker mount paths via DOCKER env var ([1befaa4](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/1befaa4b005d76453c13852236ee95a380326425))
+
 # [1.2.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.1.2...v1.2.0) (2026-05-19)
 
 
