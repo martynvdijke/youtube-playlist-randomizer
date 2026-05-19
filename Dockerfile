@@ -1,5 +1,4 @@
 FROM node:24-alpine AS ts-builder
-
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.json ./
 RUN npm ci
@@ -8,6 +7,8 @@ RUN npx tsc
 
 FROM golang:1.26.3-alpine AS builder
 
+RUN apk add --no-cache gcc musl-dev sqlite-dev
+
 WORKDIR /app
 
 COPY go.mod go.sum ./
@@ -15,10 +16,10 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 go build -o ypr-server .
+RUN CGO_ENABLED=1 go build -o ypr-server .
 
 FROM alpine:latest
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache sqlite-libs ca-certificates
 
 WORKDIR /app
 
@@ -28,9 +29,8 @@ COPY --from=builder /app/ypr-server .
 COPY --from=builder /app/static ./static
 COPY --from=ts-builder /app/static/js ./static/js
 
-RUN mkdir -p /db && chmod 777 /db
-RUN mkdir -p /app/media && chmod 777 /app/media
+RUN mkdir -p /db /app/media && chmod 777 /db /app/media
 
 EXPOSE 6270
 
-CMD ["./ypr-server"]
+CMD ["./ypr-server", "--mock"]
