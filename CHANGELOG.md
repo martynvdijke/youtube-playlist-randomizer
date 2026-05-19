@@ -1,3 +1,15 @@
+# [1.2.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.1.2...v1.2.0) (2026-05-19)
+
+
+### Bug Fixes
+
+* align Dockerfile with traces/heat pattern and default to mock mode ([c6f64df](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/c6f64df3e52beecc794919cec761a7e429655b13))
+
+
+### Features
+
+* add semconv attributes, OTEL_SERVICE_NAME support, and job tracing spans ([2c5611c](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/2c5611c10d4207d8f4f834756cb60e78dc260fbe))
+
 ## [1.1.2](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.1.1...v1.1.2) (2026-05-19)
 
 
