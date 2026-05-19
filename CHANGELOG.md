@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.3.0...v1.4.0) (2026-05-19)
+
+
+### Features
+
+* queue jobs on insufficient quota instead of rejecting, auto-resume on quota reset ([4665028](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/4665028ac194a6ef7f296af8be53f9a6310031a0))
+
 # [1.3.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.2.2...v1.3.0) (2026-05-19)
 
 
