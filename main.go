@@ -186,43 +186,9 @@ func main() {
 	printQuotaBanner(quota)
 
 	if !*mockMode {
-		pausedJobs, err := db.GetPendingJobs()
-		if err != nil {
-			log.Printf("warning: failed to check for pending jobs: %v", err)
-		}
+		resumePendingJobs(ctx)
 
-		for _, j := range pausedJobs {
-			fmt.Printf("\nFound paused job: %s -> %s (%d/%d items)\n",
-				j.SourceTitle, j.NewName, j.InsertedItems, j.TotalItems)
-
-			quota, err := db.GetQuota()
-			if err != nil {
-				log.Printf("warning: skipping resume, quota check failed: %v", err)
-				continue
-			}
-
-			remainingItems := j.TotalItems - j.InsertedItems
-			needed := db.EstimateQuotaNeeded(remainingItems)
-
-			if needed > quota.Remaining {
-				log.Printf("Insufficient quota to resume job %s: need %d, have %d", j.ID, needed, quota.Remaining)
-				continue
-			}
-
-			fmt.Printf("Resuming job %s (%d items remaining, ~%d quota needed, %d remaining)...\n",
-				j.ID, remainingItems, needed, quota.Remaining)
-
-			jobsMu.Lock()
-			jp := &jobProgress{
-				Status:        JobInserting,
-				Total:         j.TotalItems,
-				Done:          j.InsertedItems,
-				NewPlaylistID: j.NewPlaylistID,
-			}
-			jobsMu.Unlock()
-
-			go resumeJob(ctx, j, jp)
-		}
+		go jobPoller(ctx)
 	}
 
 	mux := http.NewServeMux()
@@ -372,18 +338,6 @@ func handleRandomize(w http.ResponseWriter, r *http.Request) {
 
 	if req.PlaylistID == "" || req.NewName == "" {
 		writeError(w, http.StatusBadRequest, "playlistId and newName are required")
-		return
-	}
-
-	quota, err := db.GetQuota()
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	if quota.Remaining < store.QuotaCreatePlaylist+store.QuotaListPlaylistItems+store.QuotaInsertItem {
-		writeError(w, http.StatusTooManyRequests,
-			fmt.Sprintf("Insufficient API quota remaining (%d). Wait for quota reset.", quota.Remaining))
 		return
 	}
 
@@ -636,21 +590,6 @@ func handleRandomizeHTML(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	quota, err := db.GetQuota()
-	if err != nil {
-		w.Header().Set("Content-Type", "text/html")
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintf(w, `<p class="error">%s</p>`, html.EscapeString(err.Error()))
-		return
-	}
-
-	if quota.Remaining < store.QuotaCreatePlaylist+store.QuotaListPlaylistItems+store.QuotaInsertItem {
-		w.Header().Set("Content-Type", "text/html")
-		w.WriteHeader(http.StatusTooManyRequests)
-		fmt.Fprintf(w, `<p class="error">Insufficient API quota remaining (%d). Wait for quota reset.</p>`, quota.Remaining)
-		return
-	}
-
 	jobID := fmt.Sprintf("%d", time.Now().UnixNano())
 
 	if err := db.CreateJob(jobID, playlistID, "", newName); err != nil {
@@ -679,7 +618,17 @@ func writeJobProgressHTML(w http.ResponseWriter, jobID string, jp *jobProgress) 
 	w.Header().Set("Content-Type", "text/html")
 
 	switch status {
-	case JobPending, JobFetching, JobShuffling:
+	case JobPending:
+		fmt.Fprintf(w, `<div id="progress-content" class="modal-content" hx-get="/api/jobs/%s/html" hx-trigger="every 30000ms" hx-swap="outerHTML">
+  <h2>Queued</h2>
+  <div class="progress-bar"><div class="progress-fill" style="width:0%%"></div></div>
+  <p>Waiting for API quota to become available. The job will run automatically when quota resets.</p>
+  <div style="text-align:center;margin-top:12px">
+    <button class="btn btn-primary" onclick="closeProgressModal()">OK</button>
+  </div>
+</div>`, html.EscapeString(jobID))
+
+	case JobFetching, JobShuffling:
 		label := "Starting..."
 		pct := 0
 		switch status {
@@ -805,6 +754,16 @@ func runJob(ctx context.Context, jobID string, jp *jobProgress, playlistID, newN
 		}
 		jp.mu.Unlock()
 		db.UpdateJobProgress(jobID, done, newPlaylistID)
+	}
+
+	quota, err := db.GetQuota()
+	if err != nil {
+		log.Printf("warning: quota check failed for job %s: %v", jobID, err)
+	}
+	if quota == nil || quota.Remaining < store.QuotaListPlaylistItems {
+		log.Printf("Insufficient quota to fetch items for job %s (remaining: %d). Job will wait.", jobID, quota.Remaining)
+		updateStatus(JobPending)
+		return
 	}
 
 	updateStatus(JobFetching)
@@ -1018,5 +977,54 @@ func resumeJob(ctx context.Context, j store.Job, jp *jobProgress) {
 	if span != nil {
 		span.SetAttributes(attribute.Int("items.total", jp.Total))
 		span.SetStatus(codes.Ok, "")
+	}
+}
+
+func resumePendingJobs(ctx context.Context) {
+	jobs, err := db.GetPendingJobs()
+	if err != nil {
+		log.Printf("warning: failed to check for pending jobs: %v", err)
+		return
+	}
+	for _, j := range jobs {
+		switch j.Status {
+		case "pending":
+			fmt.Printf("\nFound queued job: %s -> %s\n", j.SourcePlaylistID, j.NewName)
+			jp := &jobProgress{Status: JobPending}
+			go runJob(ctx, j.ID, jp, j.SourcePlaylistID, j.NewName)
+		case "fetching", "shuffling", "inserting":
+			fmt.Printf("\nResuming job: %s -> %s (%d/%d items)\n", j.SourceTitle, j.NewName, j.InsertedItems, j.TotalItems)
+			quota, err := db.GetQuota()
+			if err != nil {
+				log.Printf("warning: skipping resume, quota check failed: %v", err)
+				continue
+			}
+			remainingItems := j.TotalItems - j.InsertedItems
+			needed := db.EstimateQuotaNeeded(remainingItems)
+			if needed > quota.Remaining {
+				log.Printf("Insufficient quota to resume job %s: need %d, have %d", j.ID, needed, quota.Remaining)
+				continue
+			}
+			jp := &jobProgress{
+				Status:        JobInserting,
+				Total:         j.TotalItems,
+				Done:          j.InsertedItems,
+				NewPlaylistID: j.NewPlaylistID,
+			}
+			go resumeJob(ctx, j, jp)
+		}
+	}
+}
+
+func jobPoller(ctx context.Context) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			resumePendingJobs(ctx)
+		}
 	}
 }

@@ -145,6 +145,12 @@ func TestCreateAndGetJob(t *testing.T) {
 	if j.CreatedAt == "" {
 		t.Error("expected non-empty CreatedAt")
 	}
+	if j.UpdatedAt == "" {
+		t.Error("expected non-empty UpdatedAt")
+	}
+	if j.UpdatedAt != j.CreatedAt {
+		t.Errorf("expected UpdatedAt (%s) to equal CreatedAt (%s)", j.UpdatedAt, j.CreatedAt)
+	}
 }
 
 func TestGetJob_NotFound(t *testing.T) {
@@ -164,6 +170,9 @@ func TestUpdateJobStatus(t *testing.T) {
 	j, _ := s.GetJob("job1")
 	if j.Status != "fetching" {
 		t.Errorf("expected Status 'fetching', got '%s'", j.Status)
+	}
+	if j.UpdatedAt < j.CreatedAt {
+		t.Errorf("expected UpdatedAt (%s) to be >= CreatedAt (%s)", j.UpdatedAt, j.CreatedAt)
 	}
 }
 
@@ -283,6 +292,81 @@ func TestGetPendingJobs(t *testing.T) {
 	}
 	if jobs[0].ID != "job1" {
 		t.Errorf("expected job ID 'job1', got '%s'", jobs[0].ID)
+	}
+}
+
+func TestCreateJobWithExhaustedQuota(t *testing.T) {
+	s := newTestStore(t)
+
+	// Exhaust all quota
+	q, err := s.GetQuota()
+	if err != nil {
+		t.Fatalf("GetQuota failed: %v", err)
+	}
+	s.AddQuota(q.Remaining + 1)
+
+	q, err = s.GetQuota()
+	if err != nil {
+		t.Fatalf("GetQuota failed: %v", err)
+	}
+	if q.Remaining != 0 {
+		t.Fatalf("expected 0 remaining quota, got %d", q.Remaining)
+	}
+
+	err = s.CreateJob("job1", "pl123", "My Playlist", "my-randomized")
+	if err != nil {
+		t.Fatalf("CreateJob failed with exhausted quota: %v", err)
+	}
+
+	j, err := s.GetJob("job1")
+	if err != nil {
+		t.Fatalf("GetJob failed: %v", err)
+	}
+	if j.Status != "pending" {
+		t.Errorf("expected status 'pending', got '%s'", j.Status)
+	}
+	if j.SourcePlaylistID != "pl123" {
+		t.Errorf("expected SourcePlaylistID 'pl123', got '%s'", j.SourcePlaylistID)
+	}
+	if j.NewName != "my-randomized" {
+		t.Errorf("expected NewName 'my-randomized', got '%s'", j.NewName)
+	}
+	if j.TotalItems != 0 {
+		t.Errorf("expected TotalItems=0 for new job, got %d", j.TotalItems)
+	}
+
+	pending, err := s.GetPendingJobs()
+	if err != nil {
+		t.Fatalf("GetPendingJobs failed: %v", err)
+	}
+	found := false
+	for _, pj := range pending {
+		if pj.ID == "job1" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected pending job to appear in GetPendingJobs results")
+	}
+}
+
+func TestGetPendingJobs_IncludesZeroItemJobs(t *testing.T) {
+	s := newTestStore(t)
+	s.CreateJob("job1", "pl1", "", "test1")
+
+	jobs, err := s.GetPendingJobs()
+	if err != nil {
+		t.Fatalf("GetPendingJobs failed: %v", err)
+	}
+	if len(jobs) != 1 {
+		t.Fatalf("expected 1 pending job, got %d", len(jobs))
+	}
+	if jobs[0].ID != "job1" {
+		t.Errorf("expected job ID 'job1', got '%s'", jobs[0].ID)
+	}
+	if jobs[0].TotalItems != 0 {
+		t.Errorf("expected TotalItems=0, got %d", jobs[0].TotalItems)
 	}
 }
 
