@@ -1,3 +1,11 @@
+## [1.2.2](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.2.1...v1.2.2) (2026-05-19)
+
+
+### Bug Fixes
+
+* remove mock ([dfe3cc1](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/dfe3cc1dff46eb264bcecc0b2702852bb149acf5))
+* remove old unit tests ([066ed68](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/066ed68b31c95d8cdce0a3aba31913fb773f5dda))
+
 ## [1.2.1](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.2.0...v1.2.1) (2026-05-19)
 
 
