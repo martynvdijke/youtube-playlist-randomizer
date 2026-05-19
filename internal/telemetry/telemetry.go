@@ -14,10 +14,16 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 	"go.opentelemetry.io/otel/trace"
 )
 
-const serviceName = "youtube-playlist-randomizer"
+func serviceName() string {
+	if n := os.Getenv("OTEL_SERVICE_NAME"); n != "" {
+		return n
+	}
+	return "youtube-playlist-randomizer"
+}
 
 type Telemetry struct {
 	TracerProvider *sdktrace.TracerProvider
@@ -47,9 +53,11 @@ type Telemetry struct {
 }
 
 func New() (*Telemetry, error) {
+	name := serviceName()
+
 	res, err := resource.New(context.Background(),
 		resource.WithAttributes(
-			attribute.String("service.name", serviceName),
+			semconv.ServiceNameKey.String(name),
 			attribute.String("service.version", os.Getenv("VERSION")),
 		),
 	)
@@ -88,8 +96,8 @@ func New() (*Telemetry, error) {
 	)
 	otel.SetMeterProvider(mp)
 
-	tracer := tp.Tracer(serviceName)
-	meter := mp.Meter(serviceName)
+	tracer := tp.Tracer(name)
+	meter := mp.Meter(name)
 
 	t := &Telemetry{
 		TracerProvider: tp,

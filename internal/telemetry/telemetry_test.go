@@ -4,8 +4,55 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 )
+
+func TestServiceNameDefault(t *testing.T) {
+	os.Unsetenv("OTEL_SERVICE_NAME")
+	if got := serviceName(); got != "youtube-playlist-randomizer" {
+		t.Errorf("serviceName() = %q, want %q", got, "youtube-playlist-randomizer")
+	}
+}
+
+func TestServiceNameEnvVar(t *testing.T) {
+	os.Setenv("OTEL_SERVICE_NAME", "custom-name")
+	defer os.Unsetenv("OTEL_SERVICE_NAME")
+	if got := serviceName(); got != "custom-name" {
+		t.Errorf("serviceName() = %q, want %q", got, "custom-name")
+	}
+}
+
+func TestNewValidatesAllInstruments(t *testing.T) {
+	tel, err := New()
+	if err != nil {
+		t.Fatalf("New() returned error: %v", err)
+	}
+	defer tel.Shutdown(context.Background())
+
+	instruments := []struct {
+		name string
+		val  interface{}
+	}{
+		{"HTTPRequestCount", tel.HTTPRequestCount},
+		{"HTTPRequestDur", tel.HTTPRequestDur},
+		{"HTTPRequestsInFly", tel.HTTPRequestsInFly},
+		{"QuotaUsed", tel.QuotaUsed},
+		{"QuotaRemaining", tel.QuotaRemaining},
+		{"QuotaLimit", tel.QuotaLimit},
+		{"JobsCreated", tel.JobsCreated},
+		{"JobsCompleted", tel.JobsCompleted},
+		{"JobsPaused", tel.JobsPaused},
+		{"JobsFailed", tel.JobsFailed},
+		{"ItemsInserted", tel.ItemsInserted},
+		{"YouTubeAPICalls", tel.YouTubeAPICalls},
+	}
+	for _, inst := range instruments {
+		if inst.val == nil {
+			t.Errorf("instrument %q is nil", inst.name)
+		}
+	}
+}
 
 func TestNew(t *testing.T) {
 	tel, err := New()
@@ -78,6 +125,79 @@ func TestMiddlewareTracksStatusCode(t *testing.T) {
 
 	if rr.Code != http.StatusNotFound {
 		t.Errorf("expected status 404, got %d", rr.Code)
+	}
+}
+
+func TestMiddlewareWithHostPort(t *testing.T) {
+	tel, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tel.Shutdown(context.Background())
+
+	var recordedHost string
+	handler := tel.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		recordedHost = r.Host
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Host = "myserver:6270"
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rr.Code)
+	}
+	if recordedHost != "myserver:6270" {
+		t.Errorf("expected host 'myserver:6270', got %q", recordedHost)
+	}
+}
+
+func TestMiddlewareWithHostOnly(t *testing.T) {
+	tel, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tel.Shutdown(context.Background())
+
+	var recordedHost string
+	handler := tel.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		recordedHost = r.Host
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Host = "myserver"
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rr.Code)
+	}
+	if recordedHost != "myserver" {
+		t.Errorf("expected host 'myserver', got %q", recordedHost)
+	}
+}
+
+func TestMiddlewareEmptyHost(t *testing.T) {
+	tel, err := New()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tel.Shutdown(context.Background())
+
+	handler := tel.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Host = ""
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rr.Code)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/metric"
+	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 )
 
 type responseWriter struct {
@@ -54,16 +56,20 @@ func (t *Telemetry) Middleware(next http.Handler) http.Handler {
 		ctx, span := t.Tracer.Start(r.Context(), pattern)
 		defer span.End()
 
+		host, _, _ := net.SplitHostPort(r.Host)
+		if host == "" {
+			host = r.Host
+		}
 		span.SetAttributes(
-			attribute.String("http.method", r.Method),
-			attribute.String("http.url", r.URL.String()),
-			attribute.String("http.host", r.Host),
-			attribute.String("http.user_agent", r.UserAgent()),
+			semconv.HTTPMethod(r.Method),
+			semconv.HTTPURL(r.URL.String()),
+			semconv.NetHostName(host),
+			semconv.UserAgentOriginal(r.UserAgent()),
 		)
 
 		t.HTTPRequestsInFly.Add(ctx, 1)
 		t.HTTPRequestCount.Add(ctx, 1, metric.WithAttributes(
-			attribute.String("http.method", r.Method),
+			semconv.HTTPMethod(r.Method),
 			attribute.String("http.route", pattern),
 		))
 
@@ -82,7 +88,7 @@ func (t *Telemetry) Middleware(next http.Handler) http.Handler {
 		))
 
 		span.SetAttributes(
-			attribute.Int("http.status_code", status),
+			semconv.HTTPStatusCode(status),
 		)
 		if status >= 400 {
 			span.SetStatus(codes.Error, http.StatusText(status))

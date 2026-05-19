@@ -21,6 +21,9 @@ import (
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/store"
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/telemetry"
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/youtube"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const version = "1.1.2"
@@ -743,6 +746,18 @@ func writeJobProgressHTML(w http.ResponseWriter, jobID string, jp *jobProgress) 
 }
 
 func runJob(ctx context.Context, jobID string, jp *jobProgress, playlistID, newName string) {
+	var span trace.Span
+	if otel != nil {
+		ctx, span = otel.Tracer.Start(ctx, "runJob",
+			trace.WithAttributes(
+				attribute.String("job.id", jobID),
+				attribute.String("playlist.id", playlistID),
+				attribute.String("playlist.name", newName),
+			),
+		)
+		defer span.End()
+	}
+
 	updateStatus := func(s JobStatus) {
 		jp.mu.Lock()
 		jp.Status = s
@@ -756,6 +771,10 @@ func runJob(ctx context.Context, jobID string, jp *jobProgress, playlistID, newN
 		jp.Error = errMsg
 		jp.mu.Unlock()
 		db.SetJobError(jobID, errMsg)
+		if span != nil {
+			span.SetStatus(codes.Error, errMsg)
+			span.RecordError(fmt.Errorf("%s", errMsg))
+		}
 		if otel != nil {
 			otel.RecordJobFailed(context.Background(), errMsg)
 		}
@@ -861,12 +880,30 @@ func runJob(ctx context.Context, jobID string, jp *jobProgress, playlistID, newN
 	updateProgress(jp.Total, jp.Total, "")
 	updateStatus(JobDone)
 	db.SetJobDone(jobID)
+	if span != nil {
+		span.SetAttributes(attribute.Int("items.total", jp.Total))
+		span.SetStatus(codes.Ok, "")
+	}
 	if otel != nil {
 		otel.RecordJobCompleted(context.Background(), jp.Total)
 	}
 }
 
 func resumeJob(ctx context.Context, j store.Job, jp *jobProgress) {
+	var span trace.Span
+	if otel != nil {
+		ctx, span = otel.Tracer.Start(ctx, "resumeJob",
+			trace.WithAttributes(
+				attribute.String("job.id", j.ID),
+				attribute.String("playlist.id", j.SourcePlaylistID),
+				attribute.String("playlist.name", j.NewName),
+				attribute.Int("items.inserted", j.InsertedItems),
+				attribute.Int("items.total", j.TotalItems),
+			),
+		)
+		defer span.End()
+	}
+
 	updateStatus := func(s JobStatus) {
 		jp.mu.Lock()
 		jp.Status = s
@@ -880,6 +917,10 @@ func resumeJob(ctx context.Context, j store.Job, jp *jobProgress) {
 		jp.Error = errMsg
 		jp.mu.Unlock()
 		db.SetJobError(j.ID, errMsg)
+		if span != nil {
+			span.SetStatus(codes.Error, errMsg)
+			span.RecordError(fmt.Errorf("%s", errMsg))
+		}
 	}
 
 	updateProgress := func(done, total int) {
@@ -958,4 +999,8 @@ func resumeJob(ctx context.Context, j store.Job, jp *jobProgress) {
 	updateProgress(jp.Total, jp.Total)
 	updateStatus(JobDone)
 	db.SetJobDone(j.ID)
+	if span != nil {
+		span.SetAttributes(attribute.Int("items.total", jp.Total))
+		span.SetStatus(codes.Ok, "")
+	}
 }
