@@ -26,7 +26,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 )
 
-const version = "1.5.0"
+const version = "1.5.1"
 
 type JobStatus string
 
