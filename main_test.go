@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -23,6 +24,8 @@ func TestWriteQuotaPct(t *testing.T) {
 		{90, 100, 90, "quota-fill", func(s string) bool { return strings.Contains(s, "quota-critical") }},
 		{0, 0, 0, "quota-fill", func(s string) bool { return s == "quota-fill" }},
 		{100, 100, 100, "quota-fill", func(s string) bool { return strings.Contains(s, "quota-critical") }},
+		{105, 100, 100, "quota-fill", func(s string) bool { return strings.Contains(s, "quota-critical") }},
+		{200, 100, 100, "quota-fill", func(s string) bool { return strings.Contains(s, "quota-critical") }},
 	}
 
 	for _, tc := range tests {
@@ -49,7 +52,7 @@ func TestQuotaCostClass(t *testing.T) {
 		{"nil quota", nil, 10, "quota-cost quota-low"},
 		{"sufficient", sufficient, 10, "quota-cost quota-ok"},
 		{"exact sufficient", sufficient, 100, "quota-cost quota-ok"},
-		{"insufficient", insufficient, 10, "quota-cost quota-low"},
+		{"insufficient", insufficient, 10, "quota-cost quota-warning"},
 		{"zero cost nil", nil, 0, "quota-cost quota-low"},
 	}
 
@@ -76,7 +79,7 @@ func TestQuotaText(t *testing.T) {
 		{"nil quota", nil, 10, "Unknown"},
 		{"sufficient", sufficient, 10, "Sufficient"},
 		{"exact sufficient", sufficient, 100, "Sufficient"},
-		{"insufficient", insufficient, 10, "Insufficient"},
+		{"insufficient", insufficient, 10, "Low (will resume)"},
 	}
 
 	for _, tc := range tests {
@@ -166,7 +169,6 @@ func TestFindClientSecret(t *testing.T) {
 	})
 }
 
-
 func TestJobStatusConstants(t *testing.T) {
 	expected := map[JobStatus]bool{
 		JobPending:   true,
@@ -181,5 +183,142 @@ func TestJobStatusConstants(t *testing.T) {
 		if _, ok := expected[status]; !ok {
 			t.Errorf("unexpected job status: %s", status)
 		}
+	}
+}
+
+func TestHandleOAuthCallback_NoCode(t *testing.T) {
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/callback", nil)
+	handleOAuthCallback(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d", http.StatusBadRequest, rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "Missing") {
+		t.Errorf("expected error message about missing code, got %s", rr.Body.String())
+	}
+}
+
+func TestHandleOAuthCallback_NoSetup(t *testing.T) {
+	oldSetup := oauthSetup
+	oauthSetup = nil
+	defer func() { oauthSetup = oldSetup }()
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/callback?code=somecode", nil)
+	handleOAuthCallback(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, rr.Code)
+	}
+}
+
+func TestHandleAuth_NoSetup(t *testing.T) {
+	oldSetup := oauthSetup
+	oauthSetup = nil
+	defer func() { oauthSetup = oldSetup }()
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/auth", nil)
+	handleAuth(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, rr.Code)
+	}
+}
+
+func TestHandleForceResume_BadMethod(t *testing.T) {
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/jobs/resume", nil)
+	handleForceResume(rr, req)
+
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, rr.Code)
+	}
+}
+
+func TestHandleForceResume_NoJobID(t *testing.T) {
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/jobs/resume", nil)
+	handleForceResume(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d", http.StatusBadRequest, rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "Missing") {
+		t.Errorf("expected 'Missing job ID', got %s", rr.Body.String())
+	}
+}
+
+func TestHandleForceResume_YTClientNil(t *testing.T) {
+	oldClient := ytClient
+	ytClient = nil
+	defer func() { ytClient = oldClient }()
+
+	if db == nil {
+		t.Skip("no database available for this test")
+	}
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/jobs/resume", strings.NewReader("jobId=test"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	handleForceResume(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected status %d, got %d", http.StatusBadRequest, rr.Code)
+	}
+}
+
+func TestQuotaResponseJSON(t *testing.T) {
+	q := QuotaResponse{Used: 50, Limit: 10000, Remaining: 9950, Date: "2026-01-01"}
+	data, err := json.Marshal(q)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(data), `"remaining":9950`) {
+		t.Errorf("expected remaining 9950 in JSON, got %s", string(data))
+	}
+}
+
+func TestJobResponseJSON(t *testing.T) {
+	j := JobResponse{JobID: "test-123", Status: JobPending}
+	data, err := json.Marshal(j)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(data), `"jobId":"test-123"`) {
+		t.Errorf("expected jobId in JSON, got %s", string(data))
+	}
+	if !strings.Contains(string(data), `"status":"pending"`) {
+		t.Errorf("expected status pending in JSON, got %s", string(data))
+	}
+}
+
+func TestRandomizeRequestJSON(t *testing.T) {
+	r := RandomizeRequest{PlaylistID: "PL123", NewName: "My Mix"}
+	data, err := json.Marshal(r)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(data), `"playlistId":"PL123"`) {
+		t.Errorf("expected playlistId in JSON, got %s", string(data))
+	}
+}
+
+func TestWriteQuotaPct_EdgeCases(t *testing.T) {
+	pct, class := writeQuotaPct(0, 0)
+	if pct != 0 {
+		t.Errorf("zero limit pct = %f, want 0", pct)
+	}
+	if class != "quota-fill" {
+		t.Errorf("zero limit class = %q, want quota-fill", class)
+	}
+
+	pct, class = writeQuotaPct(10000, 10000)
+	if pct != 100 {
+		t.Errorf("full quota pct = %f, want 100", pct)
+	}
+	if !strings.Contains(class, "quota-critical") {
+		t.Errorf("full quota should be critical, got %q", class)
 	}
 }

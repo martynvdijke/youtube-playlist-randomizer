@@ -3,19 +3,19 @@ package youtube
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
-	"net"
-	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
-	"time"
+	"strings"
+	"sync"
 
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/models"
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/telemetry"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/option"
 	"google.golang.org/api/youtube/v3"
 )
@@ -28,6 +28,11 @@ const (
 type Client struct {
 	service *youtube.Service
 	otel    *telemetry.Telemetry
+}
+
+type OAuthSetup struct {
+	Config    *oauth2.Config
+	SecretDir string
 }
 
 func NewClient(ctx context.Context, clientSecretPath, tokenDir string, otel *telemetry.Telemetry) (*Client, error) {
@@ -45,23 +50,82 @@ func NewClient(ctx context.Context, clientSecretPath, tokenDir string, otel *tel
 		tokenDir = filepath.Dir(clientSecretPath)
 	}
 	tokenCachePath := filepath.Join(tokenDir, tokenFileName)
+
 	token, err := tokenFromFile(tokenCachePath)
 	if err != nil {
-		token, err = getTokenFromWeb(config)
-		if err != nil {
-			return nil, fmt.Errorf("unable to get token from web: %w", err)
-		}
-		if err := saveToken(tokenCachePath, token); err != nil {
-			log.Printf("warning: unable to cache token: %v", err)
-		}
+		log.Printf("No cached token found at %s.", tokenCachePath)
+		return nil, nil
 	}
 
-	service, err := youtube.NewService(ctx, option.WithTokenSource(config.TokenSource(ctx, token)))
+	_, client, err := createServiceWithToken(ctx, config, token, tokenCachePath, otel)
+	if err == nil {
+		return client, nil
+	}
+
+	if strings.Contains(err.Error(), "token expired") || strings.Contains(err.Error(), "refresh token is not set") || strings.Contains(err.Error(), "invalid_grant") || strings.Contains(err.Error(), "Invalid Credentials") || strings.Contains(err.Error(), "authError") {
+		log.Printf("Stored token at %s is expired and cannot be refreshed. Deleting.", tokenCachePath)
+		os.Remove(tokenCachePath)
+		backupPath := filepath.Join(filepath.Dir(clientSecretPath), tokenFileName)
+		os.Remove(backupPath)
+		return nil, nil
+	}
+
+	log.Printf("Token validation error (unexpected): %v", err)
+	return nil, nil
+}
+
+func createServiceWithToken(ctx context.Context, config *oauth2.Config, token *oauth2.Token, tokenCachePath string, otel *telemetry.Telemetry) (*youtube.Service, *Client, error) {
+	tokenSrc := config.TokenSource(ctx, token)
+	tokenSrc = &persistTokenSource{
+		inner: tokenSrc,
+		path:  tokenCachePath,
+	}
+
+	service, err := youtube.NewService(ctx, option.WithTokenSource(tokenSrc))
 	if err != nil {
-		return nil, fmt.Errorf("unable to create YouTube service: %w", err)
+		return nil, nil, fmt.Errorf("unable to create YouTube service: %w", err)
 	}
 
-	return &Client{service: service, otel: otel}, nil
+	client := &Client{service: service, otel: otel}
+
+	if err := client.verifyToken(ctx); err != nil {
+		if IsQuotaError(err) {
+			log.Printf("Token valid but quota exhausted — returning client anyway.")
+			return service, client, nil
+		}
+		return nil, nil, err
+	}
+
+	return service, client, nil
+}
+
+type persistTokenSource struct {
+	inner oauth2.TokenSource
+	path  string
+	mu    sync.Mutex
+}
+
+func (p *persistTokenSource) Token() (*oauth2.Token, error) {
+	token, err := p.inner.Token()
+	if err != nil {
+		return nil, err
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if err := saveToken(p.path, token); err != nil {
+		log.Printf("warning: failed to persist refreshed token: %v", err)
+	}
+	return token, nil
+}
+
+func (c *Client) verifyToken(ctx context.Context) error {
+	call := c.service.Playlists.List([]string{"snippet"}).Mine(true).MaxResults(1)
+	_, err := call.Context(ctx).Do()
+	if err != nil {
+		return fmt.Errorf("YouTube API test call failed: %w", err)
+	}
+	log.Printf("YouTube API token validated successfully")
+	return nil
 }
 
 func (c *Client) GetPlaylists(ctx context.Context) ([]models.Playlist, error) {
@@ -185,6 +249,72 @@ func convertToPlayListItem(item *youtube.PlaylistItem) models.PlayListItem {
 	)
 }
 
+func IsQuotaError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var apiErr *googleapi.Error
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+	if apiErr.Code != 403 && apiErr.Code != 429 {
+		return false
+	}
+	for _, e := range apiErr.Errors {
+		reason := strings.ToLower(e.Reason)
+		if reason == "quotaexceeded" || reason == "ratelimitexceeded" || reason == "dailylimitexceeded" {
+			return true
+		}
+	}
+	bodyLower := strings.ToLower(apiErr.Body)
+	return strings.Contains(bodyLower, "quotaexceeded") ||
+		strings.Contains(bodyLower, "dailylimitexceeded") ||
+		strings.Contains(bodyLower, "daily limit exceeded")
+}
+
+func LoadConfig(clientSecretPath string) (*OAuthSetup, error) {
+	data, err := os.ReadFile(clientSecretPath)
+	if err != nil {
+		return nil, fmt.Errorf("unable to read client secret file: %w", err)
+	}
+
+	config, err := google.ConfigFromJSON(data, scope)
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse client secret file: %w", err)
+	}
+
+	callbackURL := os.Getenv("OAUTH_CALLBACK_URL")
+	if callbackURL != "" {
+		config.RedirectURL = callbackURL
+	} else {
+		config.RedirectURL = fmt.Sprintf("http://localhost:%s/callback", os.Getenv("PORT"))
+	}
+
+	return &OAuthSetup{Config: config, SecretDir: filepath.Dir(clientSecretPath)}, nil
+}
+
+func AuthURL(setup *OAuthSetup) string {
+	return setup.Config.AuthCodeURL("state-token", oauth2.AccessTypeOffline, oauth2.ApprovalForce)
+}
+
+func HandleCallback(setup *OAuthSetup, code string, extraDirs ...string) error {
+	token, err := setup.Config.Exchange(context.Background(), code)
+	if err != nil {
+		return fmt.Errorf("unable to exchange code for token: %w", err)
+	}
+
+	dirs := append([]string{setup.SecretDir}, extraDirs...)
+	for _, dir := range dirs {
+		path := filepath.Join(dir, tokenFileName)
+		if err := saveToken(path, token); err != nil {
+			log.Printf("warning: failed to save token to %s: %v", path, err)
+		} else {
+			log.Printf("Token saved to %s", path)
+		}
+	}
+	return nil
+}
+
 func tokenFromFile(path string) (*oauth2.Token, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -206,110 +336,4 @@ func saveToken(path string, token *oauth2.Token) error {
 		return fmt.Errorf("failed to write token file: %w", err)
 	}
 	return nil
-}
-
-func getTokenFromWeb(config *oauth2.Config) (*oauth2.Token, error) {
-	// In Docker, use port 6270 (same as app, acquired before ListenAndServe)
-	// so docker -p 6270:6270 covers both the app and OAuth callback.
-	mainPortStr := os.Getenv("PORT")
-	mainPort := 6270
-	if p, err := strconv.Atoi(mainPortStr); err == nil && p > 0 {
-		mainPort = p
-	}
-
-	ports := []int{8080, 0}
-	if os.Getenv("DOCKER") == "true" {
-		ports = []int{mainPort, 0}
-	}
-
-	var lastErr error
-
-	for _, port := range ports {
-		token, err := getTokenViaLocalServer(config, port)
-		if err == nil {
-			return token, nil
-		}
-		lastErr = err
-	}
-
-	return nil, fmt.Errorf("failed to get token via web: %w", lastErr)
-}
-
-func getTokenViaLocalServer(config *oauth2.Config, preferredPort int) (*oauth2.Token, error) {
-	callbackURL := os.Getenv("OAUTH_CALLBACK_URL")
-
-	var listener net.Listener
-	var err error
-	var redirectURL string
-
-	if callbackURL != "" {
-		listener, err = net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", preferredPort))
-		if err != nil {
-			return nil, fmt.Errorf("unable to listen on port %d: %w", preferredPort, err)
-		}
-		redirectURL = callbackURL
-	} else {
-		listener, err = net.Listen("tcp", fmt.Sprintf("localhost:%d", preferredPort))
-		if err != nil {
-			return nil, fmt.Errorf("unable to listen on port %d: %w", preferredPort, err)
-		}
-		port := listener.Addr().(*net.TCPAddr).Port
-		redirectURL = fmt.Sprintf("http://localhost:%d/callback", port)
-	}
-	defer listener.Close()
-
-	config.RedirectURL = redirectURL
-
-	authURL := config.AuthCodeURL("state-token", oauth2.AccessTypeOffline)
-
-	fmt.Printf("Open the following link in your browser:\n\n%s\n\n", authURL)
-	fmt.Printf("The server is listening on %s\n", redirectURL)
-
-	tokenChan := make(chan *oauth2.Token, 1)
-	errChan := make(chan error, 1)
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
-		code := r.URL.Query().Get("code")
-		if code == "" {
-			errChan <- fmt.Errorf("no code in request")
-			http.Error(w, "No code in request", http.StatusBadRequest)
-			return
-		}
-
-		token, err := config.Exchange(context.Background(), code)
-		if err != nil {
-			errChan <- fmt.Errorf("unable to exchange code for token: %w", err)
-			http.Error(w, "Unable to exchange code for token", http.StatusInternalServerError)
-			return
-		}
-
-		fmt.Fprintln(w, "Authentication successful! You may close this window.")
-		tokenChan <- token
-	})
-
-	server := &http.Server{
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		Handler:      mux,
-	}
-
-	go func() {
-		if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
-			errChan <- err
-		}
-	}()
-
-	select {
-	case token := <-tokenChan:
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		server.Shutdown(shutdownCtx)
-		return token, nil
-	case err := <-errChan:
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		server.Shutdown(shutdownCtx)
-		return nil, err
-	}
 }

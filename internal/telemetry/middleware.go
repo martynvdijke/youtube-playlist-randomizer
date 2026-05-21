@@ -46,7 +46,7 @@ func routePattern(r *http.Request) string {
 }
 
 func (t *Telemetry) Middleware(next http.Handler) http.Handler {
-	if t == nil {
+	if t == nil || t.Tracer == nil || t.Meter == nil {
 		return next
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -99,7 +99,7 @@ func (t *Telemetry) Middleware(next http.Handler) http.Handler {
 }
 
 func (t *Telemetry) RecordQuotaMetrics(ctx context.Context, used, limit, remaining int) {
-	if t == nil {
+	if t == nil || t.Meter == nil {
 		return
 	}
 	t.QuotaUsed.Record(ctx, int64(used))
@@ -108,7 +108,7 @@ func (t *Telemetry) RecordQuotaMetrics(ctx context.Context, used, limit, remaini
 }
 
 func (t *Telemetry) RecordYouTubeAPICall(ctx context.Context, operation string) {
-	if t == nil {
+	if t == nil || t.Meter == nil {
 		return
 	}
 	t.YouTubeAPICalls.Add(ctx, 1, metric.WithAttributes(
@@ -117,14 +117,14 @@ func (t *Telemetry) RecordYouTubeAPICall(ctx context.Context, operation string) 
 }
 
 func (t *Telemetry) RecordJobCreated(ctx context.Context) {
-	if t == nil {
+	if t == nil || t.Meter == nil {
 		return
 	}
 	t.JobsCreated.Add(ctx, 1)
 }
 
 func (t *Telemetry) RecordJobCompleted(ctx context.Context, totalItems int) {
-	if t == nil {
+	if t == nil || t.Meter == nil {
 		return
 	}
 	t.JobsCompleted.Add(ctx, 1)
@@ -134,14 +134,14 @@ func (t *Telemetry) RecordJobCompleted(ctx context.Context, totalItems int) {
 }
 
 func (t *Telemetry) RecordJobPaused(ctx context.Context, done, total int) {
-	if t == nil {
+	if t == nil || t.Meter == nil {
 		return
 	}
 	t.JobsPaused.Add(ctx, 1)
 }
 
 func (t *Telemetry) RecordJobFailed(ctx context.Context, reason string) {
-	if t == nil {
+	if t == nil || t.Meter == nil {
 		return
 	}
 	t.JobsFailed.Add(ctx, 1, metric.WithAttributes(
@@ -150,14 +150,14 @@ func (t *Telemetry) RecordJobFailed(ctx context.Context, reason string) {
 }
 
 func (t *Telemetry) RecordItemsInserted(ctx context.Context, count int) {
-	if t == nil {
+	if t == nil || t.Meter == nil {
 		return
 	}
 	t.ItemsInserted.Add(ctx, int64(count))
 }
 
 func (t *Telemetry) Shutdown(ctx context.Context) {
-	if t == nil {
+	if t == nil || t.TracerProvider == nil {
 		return
 	}
 	shutdownWithTimeout := func(name string, fn func(context.Context) error) {

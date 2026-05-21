@@ -79,11 +79,13 @@ type QuotaResponse struct {
 }
 
 var (
-	ytClient *youtube.Client
-	db       *store.Store
-	dataDir  string
-	jobsMu   sync.Mutex
-	otel     *telemetry.Telemetry
+	ytClient         *youtube.Client
+	db               *store.Store
+	dataDir          string
+	jobsMu           sync.Mutex
+	otel             *telemetry.Telemetry
+	oauthSetup       *youtube.OAuthSetup
+	clientSecretPath string
 )
 
 func findClientSecret() string {
@@ -132,6 +134,7 @@ func main() {
 	showVersion := flag.Bool("version", false, "Print version")
 	dataDirFlag := flag.String("d", defaultDataDir(), "Data directory for DB and cached token")
 	mockMode := flag.Bool("mock", false, "Run in mock mode (no YouTube API credentials needed)")
+	reauth := flag.Bool("reauth", false, "Force re-authentication by deleting cached token and re-running OAuth flow")
 
 	flag.Parse()
 
@@ -141,6 +144,15 @@ func main() {
 	}
 
 	dataDir = *dataDirFlag
+
+	if *reauth {
+		tokenPath := filepath.Join(dataDir, "token.json")
+		if err := os.Remove(tokenPath); err == nil {
+			fmt.Printf("Deleted cached token at %s\n", tokenPath)
+		} else if !os.IsNotExist(err) {
+			fmt.Printf("Warning: could not delete token: %v\n", err)
+		}
+	}
 
 	var err error
 	otel, err = telemetry.New()
@@ -169,14 +181,23 @@ func main() {
 		if secretPath == "" {
 			secretPath = findClientSecret()
 		}
+		clientSecretPath = secretPath
+		oauthSetup, err = youtube.LoadConfig(secretPath)
+		if err != nil {
+			log.Printf("WARNING: Failed to load OAuth config: %v", err)
+		}
 
 		ytClient, err = youtube.NewClient(ctx, secretPath, dataDir, otel)
 		if err != nil {
-			log.Fatalf("Failed to create YouTube client: %v", err)
+			log.Printf("WARNING: Failed to create YouTube client: %v", err)
+			log.Printf("Server will start without YouTube API access. Re-authenticate to restore functionality.")
+			ytClient = nil
 		}
 
-		if _, err := db.AddQuota(store.QuotaListPlaylists); err != nil {
-			log.Printf("warning: failed to track quota: %v", err)
+		if ytClient != nil {
+			if _, err := db.AddQuota(store.QuotaListPlaylists); err != nil {
+				log.Printf("warning: failed to track quota: %v", err)
+			}
 		}
 	}
 
@@ -205,6 +226,9 @@ func main() {
 	mux.HandleFunc("/api/randomize", handleRandomize)
 	mux.HandleFunc("/api/randomize/html", handleRandomizeHTML)
 	mux.HandleFunc("/api/jobs/", handleJobStatus)
+	mux.HandleFunc("/api/jobs/resume", handleForceResume)
+	mux.HandleFunc("/callback", handleOAuthCallback)
+	mux.HandleFunc("/api/auth", handleAuth)
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
@@ -416,10 +440,127 @@ func handleJobStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, jp)
 }
 
+func handleForceResume(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	jobID := r.FormValue("jobId")
+	if jobID == "" {
+		jobID = r.URL.Query().Get("jobId")
+	}
+	if jobID == "" {
+		writeError(w, http.StatusBadRequest, "Missing job ID")
+		return
+	}
+
+	j, err := db.GetJob(jobID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "Job not found")
+		return
+	}
+
+	ctx := context.Background()
+	if ytClient == nil {
+		writeError(w, http.StatusBadRequest, "YouTube API not available")
+		return
+	}
+
+	switch j.Status {
+	case "pending":
+		jp := &jobProgress{Status: JobPending}
+		go runJob(ctx, j.ID, jp, j.SourcePlaylistID, j.NewName)
+		fmt.Fprintf(w, `<div id="progress-content" class="modal-content" hx-get="/api/jobs/%s/html" hx-trigger="every 1500ms" hx-swap="outerHTML">
+  <p>Force-resumed! Starting job...</p>
+</div>`, html.EscapeString(jobID))
+
+	case "paused", "fetching", "shuffling", "inserting":
+		jp := &jobProgress{
+			Status:        JobInserting,
+			Total:         j.TotalItems,
+			Done:          j.InsertedItems,
+			NewPlaylistID: j.NewPlaylistID,
+		}
+		go resumeJob(ctx, *j, jp)
+		fmt.Fprintf(w, `<div id="progress-content" class="modal-content" hx-get="/api/jobs/%s/html" hx-trigger="every 1500ms" hx-swap="outerHTML">
+  <p>Force-resumed! Continuing job...</p>
+</div>`, html.EscapeString(jobID))
+
+	default:
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("Job is in state %s and cannot be resumed", j.Status))
+	}
+}
+
+func handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		http.Error(w, "Missing authorization code", http.StatusBadRequest)
+		return
+	}
+
+	if oauthSetup == nil {
+		http.Error(w, "OAuth not configured", http.StatusInternalServerError)
+		return
+	}
+
+	if err := youtube.HandleCallback(oauthSetup, code, dataDir); err != nil {
+		log.Printf("OAuth callback error: %v", err)
+		http.Error(w, "Authentication failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("OAuth authentication successful! Token saved. Recreating YouTube client...")
+
+	newClient, err := youtube.NewClient(context.Background(), clientSecretPath, dataDir, otel)
+	if err == nil && newClient != nil {
+		ytClient = newClient
+		log.Printf("YouTube client recreated successfully!")
+	} else if err == nil && newClient == nil {
+		log.Printf("Warning: token still invalid after callback (unexpected)")
+	} else {
+		log.Printf("Warning: new client error (non-critical): %v", err)
+		// If we got here but have a client with no service (quota exhausted),
+		// still accept it — the token is valid
+		if newClient != nil {
+			ytClient = newClient
+		}
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	fmt.Fprint(w, `<html><body style="background:#0f0f0f;color:#eee;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column">
+<h1 style="color:#4caf50">✓ Authentication successful!</h1>
+<p style="color:#aaa;margin-top:8px">YouTube API is now available.</p>
+<p style="color:#888;font-size:13px;margin-top:16px">You may close this window and <a href="/" style="color:#ff4444">reload the app</a>.</p>
+</body></html>`)
+}
+
+func handleAuth(w http.ResponseWriter, r *http.Request) {
+	if oauthSetup == nil {
+		http.Error(w, "OAuth not configured (no client_secret.json found)", http.StatusInternalServerError)
+		return
+	}
+
+	url := youtube.AuthURL(oauthSetup)
+	w.Header().Set("Content-Type", "text/html")
+	fmt.Fprintf(w, `<div class="auth-error">
+  <p><strong>YouTube API authentication required.</strong></p>
+  <p style="margin:12px 0;color:#8899aa">Sign in with Google to allow shuffle access to your playlists.</p>
+  <div style="text-align:center;margin:16px 0">
+    <a class="btn btn-primary" href="%s" style="display:inline-block;padding:12px 28px;text-decoration:none">Sign in with Google</a>
+  </div>
+  <p style="font-size:12px;color:#668">After signing in you'll be redirected back — then <a href="/" style="color:#ff4444">reload the app</a>.</p>
+</div>`, html.EscapeString(url))
+}
+
 func writeQuotaPct(used, limit int) (float64, string) {
 	pct := 0.0
 	if limit > 0 {
 		pct = float64(used) / float64(limit) * 100
+	}
+	displayPct := pct
+	if displayPct > 100 {
+		displayPct = 100
 	}
 	fillClass := "quota-fill"
 	if pct > 80 {
@@ -427,7 +568,7 @@ func writeQuotaPct(used, limit int) (float64, string) {
 	} else if pct > 50 {
 		fillClass += " quota-warning"
 	}
-	return pct, fillClass
+	return displayPct, fillClass
 }
 
 func handleQuotaHTML(w http.ResponseWriter, r *http.Request) {
@@ -448,7 +589,12 @@ func handlePlaylistsHTML(w http.ResponseWriter, r *http.Request) {
 
 	if ytClient == nil {
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, `<p>No playlists found.</p>`)
+		fmt.Fprint(w, `<div class="auth-error">
+  <p><strong>YouTube API not available.</strong> The OAuth token is missing, expired, or invalid.</p>
+  <div style="text-align:center;margin:16px 0">
+    <a class="btn btn-primary" href="/api/auth" style="display:inline-block;padding:10px 24px;text-decoration:none">Sign in with Google</a>
+  </div>
+</div>`)
 		return
 	}
 
@@ -486,12 +632,10 @@ func handlePlaylistsHTML(w http.ResponseWriter, r *http.Request) {
 		cost := store.QuotaCreatePlaylist + pl.ItemCount*store.QuotaInsertItem
 		insufficient := quota != nil && quota.Remaining < cost
 		btnClass := "btn btn-randomize"
-		btnDisabled := ""
 		btnText := "Randomize"
 		if insufficient {
-			btnClass += " btn-disabled"
-			btnDisabled = "disabled"
-			btnText = "Insufficient Quota"
+			btnClass += " btn-warning"
+			btnText = "Randomize (may resume later)"
 		}
 
 		itemCountStr := "?"
@@ -506,10 +650,10 @@ func handlePlaylistsHTML(w http.ResponseWriter, r *http.Request) {
     <span class="playlist-title">%s</span>
     <span class="playlist-count">%s videos &middot; ~%d quota</span>
   </div>
-  <button class="%s" %s hx-get="/api/modal/html?id=%s&amp;itemCount=%d&amp;title=%s" hx-target="#modal" hx-swap="innerHTML" hx-on::after-request="showModal()">%s</button>
+  <button class="%s" hx-get="/api/modal/html?id=%s&amp;itemCount=%d&amp;title=%s" hx-target="#modal" hx-swap="innerHTML" hx-on::after-request="showModal()">%s</button>
 </div>`,
 			html.EscapeString(pl.Title), itemCountStr, cost,
-			btnClass, btnDisabled, pl.ID, pl.ItemCount, titleEncoded, btnText)
+			btnClass, pl.ID, pl.ItemCount, titleEncoded, btnText)
 	}
 }
 
@@ -531,10 +675,16 @@ func handleModalHTML(w http.ResponseWriter, r *http.Request) {
 	defaultName := fmt.Sprintf("%s-randomized-%s", title, monthYear)
 
 	w.Header().Set("Content-Type", "text/html")
+	lowQuota := quota != nil && quota.Remaining < cost
+	warningHtml := ""
+	if lowQuota {
+		warningHtml = `<div class="quota-warning-banner"><p>⚠️ Insufficient quota for one session. The job will save progress and auto-resume when quota is available (within ~24h).</p></div>`
+	}
 	fmt.Fprintf(w, `<div class="modal-content">
   <h2>Randomize Playlist</h2>
   <p>%s</p>
   <p class="quota-cost %s">Estimated quota cost: %d units (%s remaining)</p>
+  %s
   <form hx-post="/api/randomize/html" hx-target="#progress-modal" hx-swap="innerHTML" hx-on::after-request="showProgressModal()">
     <input type="hidden" name="playlistId" value="%s">
     <label for="new-name">Name for new randomized playlist:</label>
@@ -547,15 +697,19 @@ func handleModalHTML(w http.ResponseWriter, r *http.Request) {
 </div>`,
 		html.EscapeString(title),
 		quotaCostClass(quota, cost), cost, quotaText(quota, cost),
+		warningHtml,
 		html.EscapeString(playlistID),
 		html.EscapeString(defaultName))
 }
 
 func quotaCostClass(quota *store.QuotaInfo, cost int) string {
-	if quota != nil && quota.Remaining >= cost {
+	if quota == nil {
+		return "quota-cost quota-low"
+	}
+	if quota.Remaining >= cost {
 		return "quota-cost quota-ok"
 	}
-	return "quota-cost quota-low"
+	return "quota-cost quota-warning"
 }
 
 func quotaText(quota *store.QuotaInfo, cost int) string {
@@ -565,7 +719,7 @@ func quotaText(quota *store.QuotaInfo, cost int) string {
 	if quota.Remaining >= cost {
 		return "Sufficient"
 	}
-	return "Insufficient"
+	return "Low (will resume)"
 }
 
 func handleRandomizeHTML(w http.ResponseWriter, r *http.Request) {
@@ -683,16 +837,19 @@ func writeJobProgressHTML(w http.ResponseWriter, jobID string, jp *jobProgress) 
 		if total > 0 {
 			pct = int(float64(done)/float64(total) * 100)
 		}
-		fmt.Fprintf(w, `<div id="progress-paused-content" class="modal-content">
+		fmt.Fprintf(w, `<div id="progress-paused-content" class="modal-content" hx-get="/api/jobs/%s/html" hx-trigger="every 60000ms" hx-swap="outerHTML">
   <h2>Randomizing...</h2>
   <div class="progress-bar"><div class="progress-fill" style="width:%d%%"></div></div>
   <p>Inserted %d / %d items</p>
   <div class="paused-banner">
     <p>Quota exhausted. Progress saved.</p>
-    <p class="paused-sub">The job will auto-resume when quota resets (next day) on server restart.</p>
-    <button class="btn btn-primary" onclick="closeProgressModal()">OK</button>
+    <p class="paused-sub">Auto-resume in ~24h (or force-resume below if quota is available).</p>
+    <div style="display:flex;gap:8px;justify-content:center;margin-top:12px">
+      <button class="btn btn-primary" onclick="closeProgressModal()">OK</button>
+      <button class="btn btn-warning" hx-post="/api/jobs/resume" hx-vals='{"jobId":"%s"}' hx-target="#progress-paused-content" hx-swap="outerHTML">Resume Now</button>
+    </div>
   </div>
-</div>`, pct, done, total)
+</div>`, html.EscapeString(jobID), pct, done, total, html.EscapeString(jobID))
 
 	case JobError:
 		fmt.Fprintf(w, `<div id="progress-error-content" class="modal-content">
@@ -773,6 +930,15 @@ func runJob(ctx context.Context, jobID string, jp *jobProgress, playlistID, newN
 
 	items, err := ytClient.GetPlaylistItems(ctx, playlistID)
 	if err != nil {
+		if youtube.IsQuotaError(err) {
+			log.Printf("Quota error fetching items for job %s. Pausing.", jobID)
+			updateStatus(JobPaused)
+			db.SetJobPaused(jobID)
+			if otel != nil {
+				otel.RecordJobPaused(context.Background(), 0, 0)
+			}
+			return
+		}
 		setError(fmt.Sprintf("Failed to fetch playlist items: %v", err))
 		return
 	}
@@ -802,6 +968,15 @@ func runJob(ctx context.Context, jobID string, jp *jobProgress, playlistID, newN
 
 	newPlaylistID, err := ytClient.CreatePlaylist(ctx, newName)
 	if err != nil {
+		if youtube.IsQuotaError(err) {
+			log.Printf("Quota error creating playlist for job %s. Pausing.", jobID)
+			updateStatus(JobPaused)
+			db.SetJobPaused(jobID)
+			if otel != nil {
+				otel.RecordJobPaused(context.Background(), 0, jp.Total)
+			}
+			return
+		}
 		setError(fmt.Sprintf("Failed to create playlist: %v", err))
 		return
 	}
@@ -827,6 +1002,7 @@ func runJob(ctx context.Context, jobID string, jp *jobProgress, playlistID, newN
 		if quota.Remaining < store.QuotaInsertItem {
 			log.Printf("Quota exhausted after %d/%d items. Job %s paused.", jp.Done, jp.Total, jobID)
 			updateStatus(JobPaused)
+			db.SetJobPaused(jobID)
 			if otel != nil {
 				otel.RecordJobPaused(context.Background(), jp.Done, jp.Total)
 			}
@@ -834,6 +1010,15 @@ func runJob(ctx context.Context, jobID string, jp *jobProgress, playlistID, newN
 		}
 
 		if err := ytClient.InsertPlaylistItem(ctx, newPlaylistID, item.VideoID, int64(item.Position)); err != nil {
+			if youtube.IsQuotaError(err) {
+				log.Printf("Quota error during insert at %d/%d. Job %s paused.", jp.Done, jp.Total, jobID)
+				updateStatus(JobPaused)
+				db.SetJobPaused(jobID)
+				if otel != nil {
+					otel.RecordJobPaused(context.Background(), jp.Done, jp.Total)
+				}
+				return
+			}
 			log.Printf("warning: failed to insert item at position %d (video %s): %v", item.Position, item.VideoID, err)
 			continue
 		}
@@ -913,6 +1098,11 @@ func resumeJob(ctx context.Context, j store.Job, jp *jobProgress) {
 	if newPlaylistID == "" {
 		newPlaylistID, _ = func() (string, error) {
 			id, err := ytClient.CreatePlaylist(ctx, j.NewName)
+			if youtube.IsQuotaError(err) {
+				log.Printf("Quota error creating playlist during resume for job %s. Pausing.", j.ID)
+				db.SetJobPaused(j.ID)
+				return "", err
+			}
 			if err == nil {
 				if _, qErr := db.AddQuota(store.QuotaCreatePlaylist); qErr != nil {
 					log.Printf("warning: failed to track quota: %v", qErr)
@@ -951,29 +1141,36 @@ func resumeJob(ctx context.Context, j store.Job, jp *jobProgress) {
 		if quota.Remaining < store.QuotaInsertItem {
 			log.Printf("Quota exhausted during resume at %d/%d. Job %s paused again.", jp.Done, jp.Total, j.ID)
 			updateStatus(JobPaused)
+			db.SetJobPaused(j.ID)
 			return
 		}
 
-		if err := ytClient.InsertPlaylistItem(ctx, newPlaylistID, item.VideoID, int64(item.Position)); err != nil {
-			log.Printf("warning: failed to insert item at position %d (video %s): %v", item.Position, item.VideoID, err)
-			continue
+			if err := ytClient.InsertPlaylistItem(ctx, newPlaylistID, item.VideoID, int64(item.Position)); err != nil {
+				if youtube.IsQuotaError(err) {
+					log.Printf("Quota error during resume insert at %d/%d. Job %s paused.", jp.Done, jp.Total, j.ID)
+					updateStatus(JobPaused)
+					db.SetJobPaused(j.ID)
+					return
+				}
+				log.Printf("warning: failed to insert item at position %d (video %s): %v", item.Position, item.VideoID, err)
+				continue
+			}
+			if _, qErr := db.AddQuota(store.QuotaInsertItem); qErr != nil {
+				log.Printf("warning: failed to track quota: %v", qErr)
+			}
+			db.MarkItemInserted(j.ID, item.Position)
+
+			done := jp.Done + 1
+			updateProgress(done, jp.Total)
+
+			time.Sleep(10 * time.Millisecond)
+
+			if done%100 == 0 {
+				log.Printf("Resume: inserted %d/%d items for job %s", done, jp.Total, j.ID)
+			}
 		}
-		if _, qErr := db.AddQuota(store.QuotaInsertItem); qErr != nil {
-			log.Printf("warning: failed to track quota: %v", qErr)
-		}
-		db.MarkItemInserted(j.ID, item.Position)
 
-		done := jp.Done + 1
-		updateProgress(done, jp.Total)
-
-		time.Sleep(10 * time.Millisecond)
-
-		if done%100 == 0 {
-			log.Printf("Resume: inserted %d/%d items for job %s", done, jp.Total, j.ID)
-		}
-	}
-
-	log.Printf("Resume complete: inserted %d items into playlist %s", jp.Total, newPlaylistID)
+		log.Printf("Resume complete: inserted %d items into playlist %s", jp.Total, newPlaylistID)
 	updateProgress(jp.Total, jp.Total)
 	updateStatus(JobDone)
 	db.SetJobDone(j.ID)
@@ -995,8 +1192,34 @@ func resumePendingJobs(ctx context.Context) {
 			fmt.Printf("\nFound queued job: %s -> %s\n", j.SourcePlaylistID, j.NewName)
 			jp := &jobProgress{Status: JobPending}
 			go runJob(ctx, j.ID, jp, j.SourcePlaylistID, j.NewName)
+		case "paused":
+			pausedAt, parseErr := time.Parse(time.RFC3339, j.PausedAt)
+			if parseErr == nil && time.Since(pausedAt) < 24*time.Hour {
+				waitDuration := 24*time.Hour - time.Since(pausedAt)
+				log.Printf("Job %s paused less than 24h ago (will retry in %v)", j.ID, waitDuration.Round(time.Second))
+				continue
+			}
+			fmt.Printf("\nResuming paused job: %s -> %s (%d/%d items)\n", j.SourceTitle, j.NewName, j.InsertedItems, j.TotalItems)
+			quota, err := db.GetQuota()
+			if err != nil {
+				log.Printf("warning: skipping resume, quota check failed: %v", err)
+				continue
+			}
+			remainingItems := j.TotalItems - j.InsertedItems
+			needed := db.EstimateQuotaNeeded(remainingItems)
+			if needed > quota.Remaining {
+				log.Printf("Insufficient quota to resume job %s: need %d, have %d", j.ID, needed, quota.Remaining)
+				continue
+			}
+			jp := &jobProgress{
+				Status:        JobInserting,
+				Total:         j.TotalItems,
+				Done:          j.InsertedItems,
+				NewPlaylistID: j.NewPlaylistID,
+			}
+			go resumeJob(ctx, j, jp)
 		case "fetching", "shuffling", "inserting":
-			fmt.Printf("\nResuming job: %s -> %s (%d/%d items)\n", j.SourceTitle, j.NewName, j.InsertedItems, j.TotalItems)
+			fmt.Printf("\nResuming interrupted job: %s -> %s (%d/%d items)\n", j.SourceTitle, j.NewName, j.InsertedItems, j.TotalItems)
 			quota, err := db.GetQuota()
 			if err != nil {
 				log.Printf("warning: skipping resume, quota check failed: %v", err)

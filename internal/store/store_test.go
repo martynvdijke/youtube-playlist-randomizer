@@ -38,8 +38,9 @@ func TestGetQuota_Default(t *testing.T) {
 	if q.Limit != DefaultQuotaLimit {
 		t.Errorf("expected Limit=%d, got %d", DefaultQuotaLimit, q.Limit)
 	}
-	if q.Remaining != DefaultQuotaLimit {
-		t.Errorf("expected Remaining=%d, got %d", DefaultQuotaLimit, q.Remaining)
+	expected := UsableLimit(DefaultQuotaLimit)
+	if q.Remaining != expected {
+		t.Errorf("expected Remaining=%d (with 5%% safety margin), got %d", expected, q.Remaining)
 	}
 	if q.Date == "" {
 		t.Error("expected non-empty Date")
@@ -48,6 +49,7 @@ func TestGetQuota_Default(t *testing.T) {
 
 func TestAddQuota(t *testing.T) {
 	s := newTestStore(t)
+	usable := UsableLimit(DefaultQuotaLimit)
 	q, err := s.AddQuota(5)
 	if err != nil {
 		t.Fatalf("AddQuota failed: %v", err)
@@ -55,8 +57,8 @@ func TestAddQuota(t *testing.T) {
 	if q.Used != 5 {
 		t.Errorf("expected Used=5, got %d", q.Used)
 	}
-	if q.Remaining != DefaultQuotaLimit-5 {
-		t.Errorf("expected Remaining=%d, got %d", DefaultQuotaLimit-5, q.Remaining)
+	if q.Remaining != usable-5 {
+		t.Errorf("expected Remaining=%d, got %d", usable-5, q.Remaining)
 	}
 
 	q, err = s.AddQuota(10)
@@ -66,14 +68,15 @@ func TestAddQuota(t *testing.T) {
 	if q.Used != 15 {
 		t.Errorf("expected Used=15, got %d", q.Used)
 	}
-	if q.Remaining != DefaultQuotaLimit-15 {
-		t.Errorf("expected Remaining=%d, got %d", DefaultQuotaLimit-15, q.Remaining)
+	if q.Remaining != usable-15 {
+		t.Errorf("expected Remaining=%d, got %d", usable-15, q.Remaining)
 	}
 }
 
 func TestAddQuota_Exhaustion(t *testing.T) {
 	s := newTestStore(t)
-	_, err := s.AddQuota(DefaultQuotaLimit + 100)
+	usable := UsableLimit(DefaultQuotaLimit)
+	_, err := s.AddQuota(usable + 100)
 	if err != nil {
 		t.Fatalf("AddQuota failed: %v", err)
 	}
@@ -446,5 +449,111 @@ func TestPersistAcrossStores(t *testing.T) {
 func TestEnvironmentOverride(t *testing.T) {
 	if DefaultQuotaLimit != 10000 {
 		t.Errorf("expected DefaultQuotaLimit=10000, got %d", DefaultQuotaLimit)
+	}
+}
+
+func TestEffectiveLimit(t *testing.T) {
+	tests := []struct {
+		limit    int
+		expected int
+	}{
+		{0, 0},
+		{100, 95},
+		{10000, 9500},
+		{200, 190},
+	}
+	for _, tc := range tests {
+		got := UsableLimit(tc.limit)
+		if got != tc.expected {
+			t.Errorf("UsableLimit(%d) = %d, want %d", tc.limit, got, tc.expected)
+		}
+	}
+}
+
+func TestGetQuota_WithSafetyMargin(t *testing.T) {
+	s := newTestStore(t)
+	q, err := s.GetQuota()
+	if err != nil {
+		t.Fatalf("GetQuota failed: %v", err)
+	}
+	usable := UsableLimit(DefaultQuotaLimit)
+	if q.Remaining != usable {
+		t.Errorf("expected Remaining=%d (with 5%% safety margin), got %d", usable, q.Remaining)
+	}
+}
+
+func TestGetQuota_UsedNearLimit(t *testing.T) {
+	s := newTestStore(t)
+	usable := UsableLimit(DefaultQuotaLimit)
+	// Use up to exactly the usable limit
+	s.AddQuota(usable)
+	q, err := s.GetQuota()
+	if err != nil {
+		t.Fatalf("GetQuota failed: %v", err)
+	}
+	if q.Remaining != 0 {
+		t.Errorf("expected Remaining=0 (safety margin exhausted), got %d", q.Remaining)
+	}
+	if q.Used != usable {
+		t.Errorf("expected Used=%d, got %d", usable, q.Used)
+	}
+}
+
+func TestGetQuota_UsedBeyondLimit(t *testing.T) {
+	s := newTestStore(t)
+	usable := UsableLimit(DefaultQuotaLimit)
+	// Use more than the usable limit but less than the hard limit
+	s.AddQuota(usable + 200)
+	q, err := s.GetQuota()
+	if err != nil {
+		t.Fatalf("GetQuota failed: %v", err)
+	}
+	if q.Remaining != 0 {
+		t.Errorf("expected Remaining=0 (over hard limit), got %d", q.Remaining)
+	}
+	if q.Limit != DefaultQuotaLimit {
+		t.Errorf("expected Limit=%d, got %d", DefaultQuotaLimit, q.Limit)
+	}
+}
+
+func TestSetJobPaused(t *testing.T) {
+	s := newTestStore(t)
+	s.CreateJob("job1", "pl1", "", "test")
+	if err := s.SetJobPaused("job1"); err != nil {
+		t.Fatalf("SetJobPaused failed: %v", err)
+	}
+	j, _ := s.GetJob("job1")
+	if j.Status != "paused" {
+		t.Errorf("expected Status 'paused', got '%s'", j.Status)
+	}
+	if j.PausedAt == "" {
+		t.Error("expected non-empty PausedAt")
+	}
+}
+
+func TestGetPendingJobs_IncludesPaused(t *testing.T) {
+	s := newTestStore(t)
+	s.CreateJob("job1", "pl1", "", "test1")
+	s.SetJobPaused("job1")
+
+	jobs, err := s.GetPendingJobs()
+	if err != nil {
+		t.Fatalf("GetPendingJobs failed: %v", err)
+	}
+	found := false
+	for _, j := range jobs {
+		if j.ID == "job1" {
+			found = true
+			if j.Status != "paused" {
+				t.Errorf("expected status 'paused', got '%s'", j.Status)
+			}
+			if j.PausedAt == "" {
+				t.Error("expected non-empty PausedAt")
+			}
+			break
+		}
+	}
+	if !found {
+		t.Error("expected paused job in GetPendingJobs results")
 	}
 }

@@ -8,8 +8,8 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
-	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -31,24 +31,20 @@ type Telemetry struct {
 	Tracer         trace.Tracer
 	Meter          metric.Meter
 
-	// HTTP metrics
 	HTTPRequestCount  metric.Int64Counter
 	HTTPRequestDur    metric.Float64Histogram
 	HTTPRequestsInFly metric.Int64UpDownCounter
 
-	// Quota metrics
 	QuotaUsed      metric.Int64Gauge
 	QuotaRemaining metric.Int64Gauge
 	QuotaLimit     metric.Int64Gauge
 
-	// Job metrics
 	JobsCreated   metric.Int64Counter
 	JobsCompleted metric.Int64Counter
 	JobsPaused    metric.Int64Counter
 	JobsFailed    metric.Int64Counter
 	ItemsInserted metric.Int64Counter
 
-	// YouTube API call metrics
 	YouTubeAPICalls metric.Int64Counter
 }
 
@@ -65,36 +61,41 @@ func New() (*Telemetry, error) {
 		return nil, fmt.Errorf("create resource: %w", err)
 	}
 
-	traceExporter, err := stdouttrace.New(
-		stdouttrace.WithPrettyPrint(),
-		stdouttrace.WithWriter(os.Stderr),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create trace exporter: %w", err)
+	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+
+	var tp *sdktrace.TracerProvider
+	var mp *sdkmetric.MeterProvider
+
+	if endpoint == "" {
+		tp = sdktrace.NewTracerProvider()
+		mp = sdkmetric.NewMeterProvider()
+	} else {
+		traceExporter, err := otlptracehttp.New(context.Background())
+		if err != nil {
+			return nil, fmt.Errorf("create trace exporter: %w", err)
+		}
+
+		tp = sdktrace.NewTracerProvider(
+			sdktrace.WithBatcher(traceExporter,
+				sdktrace.WithBatchTimeout(5*time.Second),
+			),
+			sdktrace.WithResource(res),
+		)
+		otel.SetTracerProvider(tp)
+
+		metricExporter, err := otlpmetrichttp.New(context.Background())
+		if err != nil {
+			return nil, fmt.Errorf("create metric exporter: %w", err)
+		}
+
+		mp = sdkmetric.NewMeterProvider(
+			sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExporter,
+				sdkmetric.WithInterval(60*time.Second),
+			)),
+			sdkmetric.WithResource(res),
+		)
+		otel.SetMeterProvider(mp)
 	}
-
-	tp := sdktrace.NewTracerProvider(
-		sdktrace.WithBatcher(traceExporter,
-			sdktrace.WithBatchTimeout(5*time.Second),
-		),
-		sdktrace.WithResource(res),
-	)
-	otel.SetTracerProvider(tp)
-
-	metricExporter, err := stdoutmetric.New(
-		stdoutmetric.WithWriter(os.Stderr),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("create metric exporter: %w", err)
-	}
-
-	mp := sdkmetric.NewMeterProvider(
-		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(metricExporter,
-			sdkmetric.WithInterval(10*time.Second),
-		)),
-		sdkmetric.WithResource(res),
-	)
-	otel.SetMeterProvider(mp)
 
 	tracer := tp.Tracer(name)
 	meter := mp.Meter(name)
