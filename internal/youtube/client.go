@@ -69,7 +69,7 @@ func (c *Client) GetPlaylists(ctx context.Context) ([]models.Playlist, error) {
 	nextPageToken := ""
 
 	for {
-		call := c.service.Playlists.List([]string{"snippet", "contentDetails"}).Mine(true)
+		call := c.service.Playlists.List([]string{"snippet", "contentDetails"}).Mine(true).MaxResults(50)
 		if nextPageToken != "" {
 			call = call.PageToken(nextPageToken)
 		}
@@ -110,7 +110,7 @@ func (c *Client) GetPlaylistItems(ctx context.Context, playlistID string) ([]mod
 	nextPageToken := ""
 
 	for {
-		call := c.service.PlaylistItems.List([]string{"snippet"}).PlaylistId(playlistID)
+		call := c.service.PlaylistItems.List([]string{"snippet"}).PlaylistId(playlistID).MaxResults(50)
 		if nextPageToken != "" {
 			call = call.PageToken(nextPageToken)
 		}

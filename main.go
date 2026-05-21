@@ -9,6 +9,7 @@ import (
 	"log"
 	"math/rand"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -498,15 +499,17 @@ func handlePlaylistsHTML(w http.ResponseWriter, r *http.Request) {
 			itemCountStr = strconv.Itoa(pl.ItemCount)
 		}
 
+		titleEncoded := url.QueryEscape(pl.Title)
+
 		fmt.Fprintf(w, `<div class="playlist-card">
   <div class="playlist-info">
     <span class="playlist-title">%s</span>
     <span class="playlist-count">%s videos &middot; ~%d quota</span>
   </div>
-  <button class="%s" %s hx-get="/api/modal/html?id=%s&amp;itemCount=%d" hx-target="#modal" hx-swap="innerHTML" hx-on::after-request="showModal()">%s</button>
+  <button class="%s" %s hx-get="/api/modal/html?id=%s&amp;itemCount=%d&amp;title=%s" hx-target="#modal" hx-swap="innerHTML" hx-on::after-request="showModal()">%s</button>
 </div>`,
 			html.EscapeString(pl.Title), itemCountStr, cost,
-			btnClass, btnDisabled, pl.ID, pl.ItemCount, btnText)
+			btnClass, btnDisabled, pl.ID, pl.ItemCount, titleEncoded, btnText)
 	}
 }
 
