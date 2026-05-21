@@ -589,12 +589,7 @@ func handlePlaylistsHTML(w http.ResponseWriter, r *http.Request) {
 
 	if ytClient == nil {
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, `<div class="auth-error">
-  <p><strong>YouTube API not available.</strong> The OAuth token is missing, expired, or invalid.</p>
-  <div style="text-align:center;margin:16px 0">
-    <a class="btn btn-primary" href="/api/auth" style="display:inline-block;padding:10px 24px;text-decoration:none">Sign in with Google</a>
-  </div>
-</div>`)
+		fmt.Fprint(w, `<p>No playlists found.</p>`)
 		return
 	}
 
