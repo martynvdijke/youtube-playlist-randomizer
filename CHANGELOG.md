@@ -1,3 +1,15 @@
+# [1.6.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.5.5...v1.6.0) (2026-05-21)
+
+
+### Bug Fixes
+
+* return consistent empty state in handlePlaylistsHTML when ytClient is nil ([8731964](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/87319644b9cff5ee20781d6742c43020f64cc46b))
+
+
+### Features
+
+* update store, telemetry, and YouTube client ([9b78005](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/9b780057a18e56c9e26d7e12f6f1ddad3821cddb))
+
 ## [1.5.5](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.5.4...v1.5.5) (2026-05-21)
 
 
