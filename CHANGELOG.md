@@ -1,3 +1,10 @@
+## [1.5.4](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.5.3...v1.5.4) (2026-05-21)
+
+
+### Bug Fixes
+
+* set MaxResults(50) on YouTube API calls and pass playlist title to modal ([a38d34e](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/a38d34e48a96857c74560f726c9d3bc860119b69))
+
 ## [1.5.3](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.5.2...v1.5.3) (2026-05-21)
 
 ## [1.5.2](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.5.1...v1.5.2) (2026-05-20)
