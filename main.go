@@ -227,6 +227,7 @@ func main() {
 	mux.HandleFunc("/api/randomize/html", handleRandomizeHTML)
 	mux.HandleFunc("/api/jobs/", handleJobStatus)
 	mux.HandleFunc("/api/jobs/resume", handleForceResume)
+	mux.HandleFunc("/api/jobs/queue/html", handleJobQueueHTML)
 	mux.HandleFunc("/callback", handleOAuthCallback)
 	mux.HandleFunc("/api/auth", handleAuth)
 
@@ -490,6 +491,50 @@ func handleForceResume(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("Job is in state %s and cannot be resumed", j.Status))
 	}
+}
+
+func handleJobQueueHTML(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	jobs, err := db.GetPendingJobs()
+	if err != nil {
+		http.Error(w, "Internal error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	if len(jobs) == 0 {
+		fmt.Fprint(w, `<div id="job-queue" class="job-queue hidden"></div>`)
+		return
+	}
+
+	fmt.Fprint(w, `<div id="job-queue" class="job-queue">`)
+	fmt.Fprint(w, `<h3>Resume Queue</h3><table class="job-table"><thead><tr><th>Status</th><th>Playlist</th><th>New Name</th><th>Progress</th><th>Created</th></tr></thead><tbody>`)
+	for _, j := range jobs {
+		label := j.SourceTitle
+		if label == "" {
+			label = j.SourcePlaylistID
+		}
+		progress := ""
+		if j.TotalItems > 0 {
+			progress = fmt.Sprintf("%d / %d", j.InsertedItems, j.TotalItems)
+		} else {
+			progress = "-"
+		}
+		created := j.CreatedAt
+		if len(created) > 19 {
+			created = created[:19]
+		}
+		created = strings.Replace(created, "T", " ", 1)
+		fmt.Fprintf(w, `<tr><td class="status-%s">%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>`,
+			html.EscapeString(j.Status), html.EscapeString(j.Status),
+			html.EscapeString(label), html.EscapeString(j.NewName),
+			html.EscapeString(progress), html.EscapeString(created))
+	}
+	fmt.Fprint(w, `</tbody></table></div>`)
 }
 
 func handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
@@ -1180,6 +1225,18 @@ func resumePendingJobs(ctx context.Context) {
 	if err != nil {
 		log.Printf("warning: failed to check for pending jobs: %v", err)
 		return
+	}
+	if len(jobs) > 0 {
+		fmt.Println(strings.Repeat("-", 50))
+		fmt.Printf("  Resume queue (%d jobs, oldest first):\n", len(jobs))
+		for _, j := range jobs {
+			label := j.SourceTitle
+			if label == "" {
+				label = j.SourcePlaylistID
+			}
+			fmt.Printf("    [%s] %s -> %s (created: %s)\n", j.Status, label, j.NewName, j.CreatedAt)
+		}
+		fmt.Println(strings.Repeat("-", 50))
 	}
 	for _, j := range jobs {
 		switch j.Status {

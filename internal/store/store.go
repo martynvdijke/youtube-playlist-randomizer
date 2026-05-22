@@ -116,7 +116,11 @@ func (s *Store) migrate() error {
 }
 
 func todayKey() string {
-	return time.Now().UTC().Format("2006-01-02")
+	loc, err := time.LoadLocation("America/Los_Angeles")
+	if err != nil {
+		return time.Now().UTC().Format("2006-01-02")
+	}
+	return time.Now().In(loc).Format("2006-01-02")
 }
 
 func (s *Store) GetQuota() (*QuotaInfo, error) {

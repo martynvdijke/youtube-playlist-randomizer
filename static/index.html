@@ -31,9 +31,7 @@
   </div>
   <div id="error" class="error hidden"></div>
 
-  <div id="resume-banner" class="resume-banner hidden">
-    <span id="resume-text"></span>
-  </div>
+  <div id="job-queue" hx-get="/api/jobs/queue/html" hx-trigger="load, every 30s" hx-swap="innerHTML"></div>
 
   <div id="playlists">
     <div class="toolbar">
