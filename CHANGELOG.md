@@ -1,3 +1,10 @@
+## [1.6.2](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.6.1...v1.6.2) (2026-05-22)
+
+
+### Bug Fixes
+
+* use Pacific Time for quota date; show resume queue in stdout and web UI ([8884b1f](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/8884b1f4a82d5fe7729564248d849cc6a3263763))
+
 ## [1.6.1](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.6.0...v1.6.1) (2026-05-22)
 
 # [1.6.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.5.5...v1.6.0) (2026-05-21)
