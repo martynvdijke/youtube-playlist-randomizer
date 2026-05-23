@@ -1,6 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
-  <rect x="4" y="4" width="40" height="40" rx="10" fill="#ff4444"/>
-  <path d="M19 14v20l16-10z" fill="#fff"/>
-  <path d="M33 30a4 4 0 0 1-4 4l0 0a4 4 0 0 1-4-4l0 0a4 4 0 0 1 4-4l0 0a4 4 0 0 1 4 4z" fill="none" stroke="#fff" stroke-width="1.5" transform="translate(0,6)"/>
-  <path d="M35 28l3 3-3 3" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ff4444"/>
+      <stop offset="100%" stop-color="#cc2222"/>
+    </linearGradient>
+  </defs>
+  <!-- Rounded square background -->
+  <rect x="4" y="4" width="40" height="40" rx="10" fill="url(#bg)"/>
+  <!-- Scattered play triangle pieces -->
+  <polygon points="18,14 18,22 24,18" fill="#fff" opacity="0.95"/>
+  <polygon points="18,24 18,34 26,29" fill="#fff" opacity="0.85"/>
+  <polygon points="26,20 26,28 34,24" fill="#fff" opacity="0.75"/>
+  <!-- Shuffle arrows -->
+  <path d="M30 32l4-4-4-4" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.6"/>
+  <path d="M34 28h-3" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" opacity="0.6"/>
+  <path d="M14 16l-2 2 2 2" fill="none" stroke="#fff" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" opacity="0.4"/>
+  <path d="M12 18h2" fill="none" stroke="#fff" stroke-width="1.2" stroke-linecap="round" opacity="0.4"/>
 </svg>
