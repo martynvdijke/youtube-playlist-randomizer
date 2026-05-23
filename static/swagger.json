@@ -3,7 +3,7 @@
   "info": {
     "title": "YouTube Playlist Randomizer",
     "description": "A tool to randomize YouTube playlists. Uses the YouTube Data API v3 to list playlists, retrieve playlist items, create new playlists, and populate them with shuffled videos.\n\n## Authentication\nAll API operations require OAuth 2.0 authentication with the `https://www.googleapis.com/auth/youtube.force-ssl` scope. The tool uses the installed application OAuth flow via the Go OAuth2 library.\n\n## Rate Limiting\nThe YouTube Data API has quota limits. Playlist item insertion is rate-limited to approximately 1 request per 100ms. Jobs auto-pause when quota is exhausted and resume when quota resets (daily).",
-    "version": "1.6.2"
+    "version": "1.6.3"
     "contact": {
       "name": "Martyn van Dijke",
       "email": "martijnvdijke600@gmail.com"
