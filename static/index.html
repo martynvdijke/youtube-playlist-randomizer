@@ -35,7 +35,7 @@
 
   <div id="playlists">
     <div class="toolbar">
-      <input type="text" id="search" name="q" placeholder="Filter playlists..."
+      <input type="text" id="search" name="q" placeholder="Filter playlists..." autocomplete="off"
              hx-get="/api/playlists/html" hx-trigger="keyup changed delay:300ms"
              hx-target="#playlist-list" hx-swap="innerHTML">
     </div>
