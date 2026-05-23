@@ -1,3 +1,10 @@
+# [1.7.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.6.3...v1.7.0) (2026-05-23)
+
+
+### Features
+
+* redesign logo with scattered play triangle and shuffle arrows ([7486e50](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/7486e503a1be43556fa594c50a3ed46c92046fbb))
+
 ## [1.6.3](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.6.2...v1.6.3) (2026-05-23)
 
 
