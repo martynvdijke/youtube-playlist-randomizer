@@ -26,7 +26,7 @@
   "repositories": [
     "martynvdijke/youtube-playlist-randomizer"
   ],
-  "timezone": "UTC+1",
+  "timezone": "Europe/Amsterdam",
   "lockFileMaintenance": {
     "enabled": true
   },
@@ -52,6 +52,4 @@
   "github-actions": {
     "enabled": true
   },
-  "stalePr": true,
-  "stalePrAge": 7
 }
