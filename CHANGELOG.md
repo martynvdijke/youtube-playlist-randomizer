@@ -1,3 +1,10 @@
+## [1.7.1](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.7.0...v1.7.1) (2026-05-25)
+
+
+### Bug Fixes
+
+* serve version dynamically from Go server instead of hardcoded stale value ([c98ca36](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/c98ca3647c329e69e974bb8af4780da15a1b1aa0))
+
 # [1.7.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.6.3...v1.7.0) (2026-05-23)
 
 
