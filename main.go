@@ -236,7 +236,14 @@ func main() {
 			http.NotFound(w, r)
 			return
 		}
-		http.ServeFile(w, r, "static/index.html")
+		html, err := os.ReadFile("static/index.html")
+		if err != nil {
+			http.Error(w, "Internal error", http.StatusInternalServerError)
+			return
+		}
+		content := strings.Replace(string(html), `id="version-badge"></span>`, fmt.Sprintf(`id="version-badge">v%s</span>`, version), 1)
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, content)
 	})
 
 	addr := fmt.Sprintf(":%d", *port)
