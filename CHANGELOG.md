@@ -1,3 +1,12 @@
+## [1.7.2](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.7.1...v1.7.2) (2026-05-28)
+
+
+### Bug Fixes
+
+* **deps:** update all non-major dependencies ([#30](https://github.com/martynvdijke/youtube-playlist-randomizer/issues/30)) ([fd2d50d](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/fd2d50d0cc12c66febafa08c2eda2c8db1d4bc81))
+* **deps:** update module google.golang.org/api to v0.281.0 ([#29](https://github.com/martynvdijke/youtube-playlist-randomizer/issues/29)) ([855f021](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/855f0216089bf35759dd0740548037795129ce06))
+* invalid timezone UTC+1, use Europe/Amsterdam instead ([5bd99e5](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/5bd99e5e9825d076f3929669545fec29a61573c5))
+
 ## [1.7.2](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.7.1...v1.7.2) (2026-05-27)
 
 
