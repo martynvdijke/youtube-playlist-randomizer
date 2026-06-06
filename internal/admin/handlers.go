@@ -174,6 +174,78 @@ func (h *Handlers) HandleLogLevelGet(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleLogLevelSet updates the log level and applies it to the logger.
+// otelSettings holds the OpenTelemetry endpoint configuration.
+type otelSettings struct {
+	Endpoint string `json:"endpoint"`
+}
+
+func (h *Handlers) loadOTelSettings() otelSettings {
+	endpoint, _ := h.store.GetSetting("otel_endpoint")
+	return otelSettings{Endpoint: endpoint}
+}
+
+// HandleSettingsOTel handles GET/POST for OpenTelemetry endpoint settings.
+func (h *Handlers) HandleSettingsOTel(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		settings := h.loadOTelSettings()
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(settings)
+
+	case http.MethodPost:
+		endpoint := r.FormValue("endpoint")
+
+		if endpoint != "" && !strings.HasPrefix(endpoint, "http://") && !strings.HasPrefix(endpoint, "https://") {
+			h.logger.Errorc(r.Context(), "Invalid OTel endpoint URL scheme", "url", endpoint)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprint(w, `{"error":"url must start with http:// or https://"}`)
+			return
+		}
+
+		if err := h.store.SetSetting("otel_endpoint", endpoint); err != nil {
+			h.logger.Errorc(r.Context(), "Failed to save OTel endpoint", "error", err.Error())
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprint(w, `{"error":"internal error"}`)
+			return
+		}
+		h.logger.Infoc(r.Context(), "OTel endpoint updated")
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"ok"}`)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// HandleSettingsOTelHTML renders the OTel endpoint settings form as an HTML fragment.
+func (h *Handlers) HandleSettingsOTelHTML(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	settings := h.loadOTelSettings()
+
+	w.Header().Set("Content-Type", "text/html")
+	fmt.Fprintf(w, `<div class="admin-settings-otel">
+  <h3>OpenTelemetry</h3>
+  <p class="settings-desc">Configure an OTLP endpoint to send traces and metrics to a collector (e.g. Grafana Tempo, SigNoz, Grafana Cloud).</p>
+  <form hx-post="/api/admin/settings/otel" hx-target="#otel-status" hx-swap="innerHTML">
+    <div class="form-field">
+      <label for="otel-endpoint">OTLP Endpoint URL</label>
+      <input type="url" id="otel-endpoint" name="endpoint" placeholder="http://otel-collector:4318" value="%s">
+      <p class="field-hint">Leave empty to disable OTLP exporting. Uses <code>OTEL_EXPORTER_OTLP_ENDPOINT</code> env var as fallback.</p>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Save</button>
+      <span id="otel-status"></span>
+    </div>
+  </form>
+</div>`, html.EscapeString(settings.Endpoint))
+}
+
 func (h *Handlers) HandleLogLevelSet(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)

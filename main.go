@@ -158,19 +158,20 @@ func main() {
 		}
 	}
 
-	var err error
-	otel, err = telemetry.New()
-	if err != nil {
-		log.Printf("warning: failed to initialize telemetry: %v", err)
-		otel = nil
-	}
-
 	dbPath := filepath.Join(dataDir, "ypr.db")
-	db, err = store.Open(dbPath)
+	db, err := store.Open(dbPath)
 	if err != nil {
 		log.Fatalf("Failed to open database: %v", err)
 	}
 	defer db.Close()
+
+	// Initialize telemetry after DB is open to read OTel settings
+	otelEndpoint, _ := db.GetSetting("otel_endpoint")
+	otel, err = telemetry.New(otelEndpoint)
+	if err != nil {
+		log.Printf("warning: failed to initialize telemetry: %v", err)
+		otel = nil
+	}
 	if otel != nil {
 		defer otel.Shutdown(context.Background())
 	}
@@ -265,6 +266,8 @@ func main() {
 	mux.HandleFunc("/api/admin/settings/ai", adminHandlers.HandleSettingsAI)
 	mux.HandleFunc("/api/admin/settings/umami", adminHandlers.HandleSettingsUmami)
 	mux.HandleFunc("/api/admin/settings/umami/html", adminHandlers.HandleSettingsUmamiHTML)
+	mux.HandleFunc("/api/admin/settings/otel", adminHandlers.HandleSettingsOTel)
+	mux.HandleFunc("/api/admin/settings/otel/html", adminHandlers.HandleSettingsOTelHTML)
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {

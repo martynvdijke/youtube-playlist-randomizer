@@ -23,11 +23,17 @@ func TestServiceNameEnvVar(t *testing.T) {
 	}
 }
 
-func TestNewValidatesAllInstruments(t *testing.T) {
-	tel, err := New()
+func newTestTelemetry(t *testing.T) *Telemetry {
+	t.Helper()
+	tel, err := New("")
 	if err != nil {
 		t.Fatalf("New() returned error: %v", err)
 	}
+	return tel
+}
+
+func TestNewValidatesAllInstruments(t *testing.T) {
+	tel := newTestTelemetry(t)
 	defer tel.Shutdown(context.Background())
 
 	instruments := []struct {
@@ -55,10 +61,7 @@ func TestNewValidatesAllInstruments(t *testing.T) {
 }
 
 func TestNew(t *testing.T) {
-	tel, err := New()
-	if err != nil {
-		t.Fatalf("New() returned error: %v", err)
-	}
+	tel := newTestTelemetry(t)
 	if tel == nil {
 		t.Fatal("New() returned nil")
 	}
@@ -84,10 +87,7 @@ func TestNew(t *testing.T) {
 }
 
 func TestMiddleware(t *testing.T) {
-	tel, err := New()
-	if err != nil {
-		t.Fatal(err)
-	}
+	tel := newTestTelemetry(t)
 	defer tel.Shutdown(context.Background())
 
 	handler := tel.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -108,10 +108,7 @@ func TestMiddleware(t *testing.T) {
 }
 
 func TestMiddlewareTracksStatusCode(t *testing.T) {
-	tel, err := New()
-	if err != nil {
-		t.Fatal(err)
-	}
+	tel := newTestTelemetry(t)
 	defer tel.Shutdown(context.Background())
 
 	handler := tel.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -129,10 +126,7 @@ func TestMiddlewareTracksStatusCode(t *testing.T) {
 }
 
 func TestMiddlewareWithHostPort(t *testing.T) {
-	tel, err := New()
-	if err != nil {
-		t.Fatal(err)
-	}
+	tel := newTestTelemetry(t)
 	defer tel.Shutdown(context.Background())
 
 	var recordedHost string
@@ -155,10 +149,7 @@ func TestMiddlewareWithHostPort(t *testing.T) {
 }
 
 func TestMiddlewareWithHostOnly(t *testing.T) {
-	tel, err := New()
-	if err != nil {
-		t.Fatal(err)
-	}
+	tel := newTestTelemetry(t)
 	defer tel.Shutdown(context.Background())
 
 	var recordedHost string
@@ -181,10 +172,7 @@ func TestMiddlewareWithHostOnly(t *testing.T) {
 }
 
 func TestMiddlewareEmptyHost(t *testing.T) {
-	tel, err := New()
-	if err != nil {
-		t.Fatal(err)
-	}
+	tel := newTestTelemetry(t)
 	defer tel.Shutdown(context.Background())
 
 	handler := tel.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -202,10 +190,7 @@ func TestMiddlewareEmptyHost(t *testing.T) {
 }
 
 func TestRecordQuotaMetrics(t *testing.T) {
-	tel, err := New()
-	if err != nil {
-		t.Fatal(err)
-	}
+	tel := newTestTelemetry(t)
 	defer tel.Shutdown(context.Background())
 
 	// Should not panic
@@ -213,10 +198,7 @@ func TestRecordQuotaMetrics(t *testing.T) {
 }
 
 func TestRecordYouTubeAPICall(t *testing.T) {
-	tel, err := New()
-	if err != nil {
-		t.Fatal(err)
-	}
+	tel := newTestTelemetry(t)
 	defer tel.Shutdown(context.Background())
 
 	tel.RecordYouTubeAPICall(context.Background(), "playlists.list")
@@ -224,10 +206,7 @@ func TestRecordYouTubeAPICall(t *testing.T) {
 }
 
 func TestRecordJobMetrics(t *testing.T) {
-	tel, err := New()
-	if err != nil {
-		t.Fatal(err)
-	}
+	tel := newTestTelemetry(t)
 	defer tel.Shutdown(context.Background())
 
 	tel.RecordJobCreated(context.Background())
@@ -285,10 +264,7 @@ func assertNotPanics(t *testing.T, fn func()) {
 }
 
 func TestMiddlewarePanicSafety(t *testing.T) {
-	tel, err := New()
-	if err != nil {
-		t.Fatal(err)
-	}
+	tel := newTestTelemetry(t)
 	defer tel.Shutdown(context.Background())
 
 	// Test with nil Telemetry - should not panic

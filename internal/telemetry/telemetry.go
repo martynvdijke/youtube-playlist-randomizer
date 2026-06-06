@@ -48,7 +48,9 @@ type Telemetry struct {
 	YouTubeAPICalls metric.Int64Counter
 }
 
-func New() (*Telemetry, error) {
+// New creates a Telemetry instance with an optional OTLP endpoint.
+// If endpoint is empty, it falls back to the OTEL_EXPORTER_OTLP_ENDPOINT env var.
+func New(endpoint string) (*Telemetry, error) {
 	name := serviceName()
 
 	res, err := resource.New(context.Background(),
@@ -61,7 +63,9 @@ func New() (*Telemetry, error) {
 		return nil, fmt.Errorf("create resource: %w", err)
 	}
 
-	endpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	if endpoint == "" {
+		endpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	}
 
 	var tp *sdktrace.TracerProvider
 	var mp *sdkmetric.MeterProvider
