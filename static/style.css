@@ -496,3 +496,237 @@ a.btn-primary:hover {
 .progress-done {
   background: linear-gradient(90deg, #4caf50, #66bb6a) !important;
 }
+
+/* Admin Panel */
+.header-nav {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.nav-link {
+  color: #888;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 4px 12px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.nav-link:hover,
+.nav-link.active {
+  color: #eee;
+  background: #2a2a2a;
+}
+
+.nav-link.active {
+  color: #ff4444;
+}
+
+#admin-panel {
+  display: none;
+}
+
+#admin-panel.visible {
+  display: block;
+}
+
+.admin-tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid #2a2a2a;
+  margin-bottom: 16px;
+}
+
+.admin-tab {
+  padding: 10px 20px;
+  color: #888;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.admin-tab:hover {
+  color: #ccc;
+}
+
+.admin-tab.active {
+  color: #ff4444;
+  border-bottom-color: #ff4444;
+}
+
+/* Log Viewer */
+.admin-log-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.log-count {
+  font-size: 13px;
+  color: #888;
+}
+
+.log-filters {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.log-filters label {
+  font-size: 12px;
+  color: #888;
+}
+
+.log-filters select,
+.admin-verbosity select {
+  padding: 4px 8px;
+  background: #1a1a1a;
+  color: #eee;
+  border: 1px solid #333;
+  border-radius: 4px;
+  font-size: 12px;
+  outline: none;
+}
+
+.log-filters input[type="text"] {
+  padding: 4px 8px;
+  background: #1a1a1a;
+  color: #eee;
+  border: 1px solid #333;
+  border-radius: 4px;
+  font-size: 12px;
+  outline: none;
+  width: 160px;
+}
+
+.log-filters input[type="text"]:focus,
+.log-filters select:focus {
+  border-color: #ff4444;
+}
+
+.admin-verbosity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background: #1a1a2e;
+  border: 1px solid #333;
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.admin-verbosity label {
+  color: #888;
+}
+
+.verbosity-ok {
+  color: #81c784;
+  font-size: 12px;
+}
+
+/* Log Table */
+.log-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+}
+
+.log-table thead th {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 2px solid #333;
+  color: #888;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  position: sticky;
+  top: 0;
+  background: #0f0f0f;
+}
+
+.log-table tbody tr {
+  transition: background 0.15s;
+}
+
+.log-table tbody tr:hover {
+  background: #1a1a1a;
+}
+
+.log-table td {
+  padding: 5px 10px;
+  border-bottom: 1px solid #1a1a1a;
+  vertical-align: top;
+  line-height: 1.4;
+}
+
+.log-ts {
+  color: #666;
+  white-space: nowrap;
+  width: 75px;
+}
+
+.log-sev {
+  font-weight: 600;
+  white-space: nowrap;
+  width: 55px;
+}
+
+.log-sev-error .log-sev { color: #ff4444; }
+.log-sev-warn .log-sev { color: #ff9800; }
+.log-sev-info .log-sev { color: #42a5f5; }
+.log-sev-debug .log-sev { color: #888; }
+
+.log-src {
+  color: #aaa;
+  white-space: nowrap;
+  width: 80px;
+}
+
+.log-msg {
+  color: #ccc;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.log-attrs {
+  color: #666;
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.log-empty {
+  text-align: center;
+  color: #666;
+  padding: 24px !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+}
+
+/* Settings section placeholder */
+.admin-settings {
+  padding: 16px;
+  color: #888;
+  text-align: center;
+}
+
+.admin-settings p {
+  margin-bottom: 8px;
+}

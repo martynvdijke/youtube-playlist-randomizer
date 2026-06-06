@@ -34,6 +34,44 @@ type Store struct {
 	db *sql.DB
 }
 
+// Severity levels in ascending order
+const (
+	SeverityDEBUG = "DEBUG"
+	SeverityINFO  = "INFO"
+	SeverityWARN  = "WARN"
+	SeverityERROR = "ERROR"
+)
+
+func severityNumeric(s string) int {
+	switch s {
+	case SeverityERROR:
+		return 3
+	case SeverityWARN:
+		return 2
+	case SeverityINFO:
+		return 1
+	case SeverityDEBUG:
+		return 0
+	default:
+		return 0
+	}
+}
+
+type LogEntry struct {
+	ID         int64  `json:"id"`
+	Timestamp  string `json:"timestamp"`
+	Severity   string `json:"severity"`
+	Source     string `json:"source"`
+	Message    string `json:"message"`
+	Attributes string `json:"attributes,omitempty"`
+	CreatedAt  string `json:"createdAt"`
+}
+
+type LogCount struct {
+	Severity string `json:"severity"`
+	Count    int    `json:"count"`
+}
+
 type QuotaInfo struct {
 	Date      string `json:"date"`
 	Used      int    `json:"used"`
@@ -102,6 +140,19 @@ func (s *Store) migrate() error {
 			position INTEGER NOT NULL,
 			inserted INTEGER NOT NULL DEFAULT 0,
 			FOREIGN KEY (job_id) REFERENCES jobs(id)
+		)`,
+		`CREATE TABLE IF NOT EXISTS logs (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			timestamp TEXT NOT NULL,
+			severity TEXT NOT NULL,
+			source TEXT NOT NULL DEFAULT '',
+			message TEXT NOT NULL,
+			attributes TEXT DEFAULT '',
+			created_at TEXT NOT NULL
+		)`,
+		`CREATE TABLE IF NOT EXISTS app_settings (
+			key TEXT PRIMARY KEY,
+			value TEXT NOT NULL DEFAULT ''
 		)`,
 	}
 	for _, q := range queries {
@@ -315,4 +366,87 @@ func (s *Store) GetLatestJob() (*Job, error) {
 		return nil, err
 	}
 	return j, nil
+}
+
+func (s *Store) InsertLog(entry LogEntry) error {
+	now := nowRFC3339()
+	_, err := s.db.Exec(`INSERT INTO logs (timestamp, severity, source, message, attributes, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		entry.Timestamp, entry.Severity, entry.Source, entry.Message, entry.Attributes, now)
+	return err
+}
+
+func (s *Store) GetLogs(minLevel string, sourceFilter string, limit, offset int) ([]LogEntry, error) {
+	minN := severityNumeric(minLevel)
+
+	query := `SELECT id, timestamp, severity, source, message, COALESCE(attributes,''), created_at FROM logs
+		WHERE CASE severity WHEN 'ERROR' THEN 3 WHEN 'WARN' THEN 2 WHEN 'INFO' THEN 1 WHEN 'DEBUG' THEN 0 ELSE 0 END >= ?`
+	args := []interface{}{minN}
+
+	if sourceFilter != "" {
+		query += ` AND source LIKE '%' || ? || '%'`
+		args = append(args, sourceFilter)
+	}
+
+	if limit <= 0 || limit > 500 {
+		limit = 200
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
+	query += ` ORDER BY id DESC LIMIT ? OFFSET ?`
+	args = append(args, limit, offset)
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var entries []LogEntry
+	for rows.Next() {
+		var e LogEntry
+		if err := rows.Scan(&e.ID, &e.Timestamp, &e.Severity, &e.Source, &e.Message, &e.Attributes, &e.CreatedAt); err != nil {
+			return nil, err
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
+}
+
+func (s *Store) GetLogCounts() ([]LogCount, error) {
+	rows, err := s.db.Query(`SELECT severity, COUNT(*) as cnt FROM logs GROUP BY severity ORDER BY
+		CASE severity WHEN 'ERROR' THEN 0 WHEN 'WARN' THEN 1 WHEN 'INFO' THEN 2 WHEN 'DEBUG' THEN 3 ELSE 4 END`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var counts []LogCount
+	for rows.Next() {
+		var c LogCount
+		if err := rows.Scan(&c.Severity, &c.Count); err != nil {
+			return nil, err
+		}
+		counts = append(counts, c)
+	}
+	return counts, rows.Err()
+}
+
+func (s *Store) GetSetting(key string) (string, error) {
+	var value string
+	err := s.db.QueryRow("SELECT value FROM app_settings WHERE key = ?", key).Scan(&value)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return value, nil
+}
+
+func (s *Store) SetSetting(key, value string) error {
+	_, err := s.db.Exec(`INSERT INTO app_settings (key, value) VALUES (?, ?)
+		ON CONFLICT(key) DO UPDATE SET value = ?`, key, value, value)
+	return err
 }

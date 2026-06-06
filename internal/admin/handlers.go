@@ -1,0 +1,314 @@
+package admin
+
+import (
+	"encoding/json"
+	"fmt"
+	"html"
+	"io"
+	"net/http"
+	"strconv"
+	"strings"
+
+	"github.com/martynvdijke/youtube-playlist-randomizer/internal/logging"
+	"github.com/martynvdijke/youtube-playlist-randomizer/internal/store"
+)
+
+type Handlers struct {
+	store  *store.Store
+	logger *logging.Logger
+}
+
+func New(s *store.Store, l *logging.Logger) *Handlers {
+	return &Handlers{store: s, logger: l}
+}
+
+// HandleLogsHTML renders the log viewer HTML fragment.
+// Query params: min_level (default WARN), source (optional), offset (default 0)
+func (h *Handlers) HandleLogsHTML(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	minLevel := r.URL.Query().Get("min_level")
+	if minLevel == "" {
+		minLevel = "WARN"
+	}
+	source := r.URL.Query().Get("source")
+	offsetStr := r.URL.Query().Get("offset")
+	offset, _ := strconv.Atoi(offsetStr)
+	if offset < 0 {
+		offset = 0
+	}
+
+	entries, err := h.store.GetLogs(minLevel, source, 200, offset)
+	if err != nil {
+		h.logger.Errorc(r.Context(), "Failed to query logs", "error", err.Error())
+		http.Error(w, "Internal error", http.StatusInternalServerError)
+		return
+	}
+
+	counts, err := h.store.GetLogCounts()
+	if err != nil {
+		counts = nil
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	h.writeLogViewer(w, entries, counts, minLevel, source)
+}
+
+func selected(current, value string) string {
+	if current == value {
+		return ` selected`
+	}
+	return ""
+}
+
+func shortTimestamp(ts string) string {
+	// RFC3339 -> short: "15:04:05"
+	if len(ts) >= 19 {
+		return ts[11:19]
+	}
+	return ts
+}
+
+func truncateAttrs(attrs string, maxLen int) string {
+	if len(attrs) > maxLen {
+		return attrs[:maxLen] + "..."
+	}
+	return attrs
+}
+
+func (h *Handlers) writeLogViewer(w io.Writer, entries []store.LogEntry, counts []store.LogCount, minLevel, source string) {
+	total := len(entries)
+	countMap := map[string]int{"DEBUG": 0, "INFO": 0, "WARN": 0, "ERROR": 0}
+	for _, c := range counts {
+		countMap[c.Severity] = c.Count
+	}
+	countStr := fmt.Sprintf("Showing %d entries (%d DEBUG, %d INFO, %d WARN, %d ERROR)",
+		total, countMap["DEBUG"], countMap["INFO"], countMap["WARN"], countMap["ERROR"])
+
+	// Severity filter dropdown
+	fmt.Fprintf(w, `<div class="admin-log-controls">
+  <div class="log-count">%s</div>
+  <div class="log-filters">
+    <label>Severity: </label>
+    <select name="min_level" hx-get="/api/admin/logs/html" hx-trigger="change" hx-target="#admin-content" hx-swap="innerHTML" hx-include="this">
+      <option value="DEBUG"%s>DEBUG</option>
+      <option value="INFO"%s>INFO</option>
+      <option value="WARN"%s>WARN</option>
+      <option value="ERROR"%s>ERROR</option>
+    </select>
+    <label>Source: </label>
+    <input type="text" name="source" placeholder="Filter by source..." value="%s" hx-get="/api/admin/logs/html" hx-trigger="keyup changed delay:300ms" hx-target="#admin-content" hx-swap="innerHTML" hx-include="this">
+  </div>
+</div>`,
+		countStr,
+		selected(minLevel, "DEBUG"), selected(minLevel, "INFO"),
+		selected(minLevel, "WARN"), selected(minLevel, "ERROR"),
+		html.EscapeString(source))
+
+	// Verbosity control
+	fmt.Fprintf(w, `<div class="admin-verbosity">
+  <label>Minimum log level: </label>
+  <select name="log_level" hx-post="/api/admin/settings/log_level" hx-trigger="change" hx-target="#verbosity-status" hx-swap="innerHTML">
+    <option value="DEBUG"%s>DEBUG</option>
+    <option value="INFO"%s>INFO</option>
+    <option value="WARN"%s>WARN</option>
+    <option value="ERROR"%s>ERROR</option>
+  </select>
+  <span id="verbosity-status"></span>
+</div>`,
+		selected(minLevel, "DEBUG"), selected(minLevel, "INFO"),
+		selected(minLevel, "WARN"), selected(minLevel, "ERROR"))
+
+	// Log table
+	fmt.Fprint(w, `<table class="log-table">
+  <thead>
+    <tr>
+      <th>Timestamp</th>
+      <th>Severity</th>
+      <th>Source</th>
+      <th>Message</th>
+      <th>Attributes</th>
+    </tr>
+  </thead>
+  <tbody>`)
+
+	if len(entries) == 0 {
+		fmt.Fprint(w, `<tr><td colspan="5" class="log-empty">No log entries found.</td></tr>`)
+	} else {
+		for _, e := range entries {
+			sevClass := "log-sev-" + strings.ToLower(e.Severity)
+			fmt.Fprintf(w, `<tr class="%s">
+  <td class="log-ts">%s</td>
+  <td class="log-sev">%s</td>
+  <td class="log-src">%s</td>
+  <td class="log-msg">%s</td>
+  <td class="log-attrs">%s</td>
+</tr>`,
+				sevClass,
+				html.EscapeString(shortTimestamp(e.Timestamp)),
+				html.EscapeString(e.Severity),
+				html.EscapeString(e.Source),
+				html.EscapeString(e.Message),
+				html.EscapeString(truncateAttrs(e.Attributes, 60)))
+		}
+	}
+
+	fmt.Fprint(w, `</tbody></table>`)
+}
+
+// HandleLogLevelGet returns the current log level setting as plain text.
+func (h *Handlers) HandleLogLevelGet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	level, err := h.store.GetSetting("log_level")
+	if err != nil || level == "" {
+		level = "WARN"
+	}
+	w.Header().Set("Content-Type", "text/plain")
+	fmt.Fprint(w, level)
+}
+
+// HandleLogLevelSet updates the log level and applies it to the logger.
+func (h *Handlers) HandleLogLevelSet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		h.logger.Errorc(r.Context(), "Failed to read request body", "error", err.Error())
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	level := strings.TrimSpace(string(body))
+	if level == "" {
+		level = r.FormValue("log_level")
+	}
+	if level == "" {
+		h.logger.Warnc(r.Context(), "Empty log level in request")
+		http.Error(w, "Missing log_level", http.StatusBadRequest)
+		return
+	}
+
+	sev := logging.ParseSeverity(level)
+	if err := h.store.SetSetting("log_level", sev.String()); err != nil {
+		h.logger.Errorc(r.Context(), "Failed to save log level", "error", err.Error())
+		http.Error(w, "Internal error", http.StatusInternalServerError)
+		return
+	}
+	h.logger.SetMinLevel(sev)
+	h.logger.Infoc(r.Context(), "Log level changed", "level", sev.String())
+
+	w.Header().Set("Content-Type", "text/html")
+	fmt.Fprintf(w, `<span class="verbosity-ok">Set to %s</span>`, sev.String())
+}
+
+// HandleSettingsEmail handles GET/POST for email settings.
+func (h *Handlers) HandleSettingsEmail(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		val, _ := h.store.GetSetting("settings_email")
+		if val == "" {
+			val = "{}"
+		}
+		h.logger.Infoc(r.Context(), "Email settings retrieved")
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, val)
+
+	case http.MethodPost:
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			h.logger.Errorc(r.Context(), "Failed to update email settings", "error", err.Error())
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprint(w, `{"error":"bad request"}`)
+			return
+		}
+		if len(body) == 0 {
+			h.logger.Errorc(r.Context(), "Failed to update email settings", "reason", "empty body")
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprint(w, `{"error":"empty body"}`)
+			return
+		}
+		var dummy interface{}
+		if err := json.Unmarshal(body, &dummy); err != nil {
+			h.logger.Errorc(r.Context(), "Failed to update email settings", "reason", "invalid JSON")
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprint(w, `{"error":"invalid JSON"}`)
+			return
+		}
+		if err := h.store.SetSetting("settings_email", string(body)); err != nil {
+			h.logger.Errorc(r.Context(), "Failed to update email settings", "error", err.Error())
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprint(w, `{"error":"internal error"}`)
+			return
+		}
+		h.logger.Warnc(r.Context(), "Email settings updated")
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"ok"}`)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// HandleSettingsAI handles GET/POST for AI settings.
+func (h *Handlers) HandleSettingsAI(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		val, _ := h.store.GetSetting("settings_ai")
+		if val == "" {
+			val = "{}"
+		}
+		h.logger.Infoc(r.Context(), "AI settings retrieved")
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, val)
+
+	case http.MethodPost:
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			h.logger.Errorc(r.Context(), "Failed to update AI settings", "error", err.Error())
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprint(w, `{"error":"bad request"}`)
+			return
+		}
+		if len(body) == 0 {
+			h.logger.Errorc(r.Context(), "Failed to update AI settings", "reason", "empty body")
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprint(w, `{"error":"empty body"}`)
+			return
+		}
+		var dummy interface{}
+		if err := json.Unmarshal(body, &dummy); err != nil {
+			h.logger.Errorc(r.Context(), "Failed to update AI settings", "reason", "invalid JSON")
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprint(w, `{"error":"invalid JSON"}`)
+			return
+		}
+		if err := h.store.SetSetting("settings_ai", string(body)); err != nil {
+			h.logger.Errorc(r.Context(), "Failed to update AI settings", "error", err.Error())
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprint(w, `{"error":"internal error"}`)
+			return
+		}
+		h.logger.Warnc(r.Context(), "AI settings updated")
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"ok"}`)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}

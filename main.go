@@ -19,6 +19,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/martynvdijke/youtube-playlist-randomizer/internal/admin"
+	"github.com/martynvdijke/youtube-playlist-randomizer/internal/logging"
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/store"
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/telemetry"
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/youtube"
@@ -86,6 +88,8 @@ var (
 	otel             *telemetry.Telemetry
 	oauthSetup       *youtube.OAuthSetup
 	clientSecretPath string
+	logger           *logging.Logger
+	adminHandlers    *admin.Handlers
 )
 
 func findClientSecret() string {
@@ -171,6 +175,20 @@ func main() {
 		defer otel.Shutdown(context.Background())
 	}
 
+	// Initialize structured logger with default WARN level
+	defaultLevel := logging.WARN
+	levelStr, _ := db.GetSetting("log_level")
+	if levelStr != "" {
+		defaultLevel = logging.ParseSeverity(levelStr)
+	}
+	logger = logging.New(logging.LogOptions{
+		Store:    db,
+		MinLevel: defaultLevel,
+		Service:  "ypr",
+	})
+	adminHandlers = admin.New(db, logger)
+	logger.Infoc(context.Background(), "Application started", "version", version)
+
 	ctx := context.Background()
 
 	if *mockMode {
@@ -230,6 +248,21 @@ func main() {
 	mux.HandleFunc("/api/jobs/queue/html", handleJobQueueHTML)
 	mux.HandleFunc("/callback", handleOAuthCallback)
 	mux.HandleFunc("/api/auth", handleAuth)
+
+	// Admin panel routes
+	mux.HandleFunc("/api/admin/logs/html", adminHandlers.HandleLogsHTML)
+	mux.HandleFunc("/api/admin/settings/log_level", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			adminHandlers.HandleLogLevelGet(w, r)
+		case http.MethodPost:
+			adminHandlers.HandleLogLevelSet(w, r)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+	mux.HandleFunc("/api/admin/settings/email", adminHandlers.HandleSettingsEmail)
+	mux.HandleFunc("/api/admin/settings/ai", adminHandlers.HandleSettingsAI)
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {

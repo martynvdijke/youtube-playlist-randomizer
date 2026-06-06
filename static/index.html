@@ -23,6 +23,10 @@
       <div class="quota-fill" style="width:0%"></div>
     </div>
   </div>
+  <nav class="header-nav">
+    <a href="#" class="nav-link active" id="nav-main" onclick="showMain()">Playlists</a>
+    <a href="#" class="nav-link" id="nav-admin" onclick="showAdmin()">Admin</a>
+  </nav>
 </header>
 
 <main>
@@ -47,10 +51,41 @@
   </div>
 </main>
 
+<!-- Admin Panel -->
+<div id="admin-panel">
+  <div class="admin-tabs">
+    <button class="admin-tab active" hx-get="/api/admin/logs/html" hx-target="#admin-content" hx-swap="innerHTML" hx-trigger="click">Logs</button>
+    <button class="admin-tab" onclick="alert('Settings coming soon — use the Logs tab to configure log verbosity.')">Settings</button>
+  </div>
+  <div id="admin-content" hx-get="/api/admin/logs/html" hx-trigger="load" hx-swap="innerHTML">
+    Loading logs...
+  </div>
+</div>
+
 <!-- Randomize Modal -->
 <div id="modal" class="modal hidden"></div>
 
 <!-- Progress Modal -->
 <div id="progress-modal" class="modal hidden"></div>
+<script>
+function showMain() {
+  document.getElementById('admin-panel').classList.remove('visible');
+  document.getElementById('playlists').style.display = '';
+  document.getElementById('job-queue').style.display = '';
+  document.getElementById('loading').style.display = '';
+  document.getElementById('no-playlists').style.display = '';
+  document.getElementById('nav-main').classList.add('active');
+  document.getElementById('nav-admin').classList.remove('active');
+}
+function showAdmin() {
+  document.getElementById('admin-panel').classList.add('visible');
+  document.getElementById('playlists').style.display = 'none';
+  document.getElementById('job-queue').style.display = 'none';
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('no-playlists').style.display = 'none';
+  document.getElementById('nav-main').classList.remove('active');
+  document.getElementById('nav-admin').classList.add('active');
+}
+</script>
 </body>
 </html>
