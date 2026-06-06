@@ -158,8 +158,9 @@ func main() {
 		}
 	}
 
+	var err error
 	dbPath := filepath.Join(dataDir, "ypr.db")
-	db, err := store.Open(dbPath)
+	db, err = store.Open(dbPath)
 	if err != nil {
 		log.Fatalf("Failed to open database: %v", err)
 	}
