@@ -312,3 +312,108 @@ func (h *Handlers) HandleSettingsAI(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
+
+type umamiSettings struct {
+	URL       string `json:"url"`
+	WebsiteID string `json:"websiteId"`
+	ScriptURL string `json:"scriptUrl,omitempty"`
+}
+
+func (h *Handlers) loadUmamiSettings() umamiSettings {
+	url, _ := h.store.GetSetting("umami_url")
+	websiteID, _ := h.store.GetSetting("umami_website_id")
+	scriptURL, _ := h.store.GetSetting("umami_script_url")
+	return umamiSettings{URL: url, WebsiteID: websiteID, ScriptURL: scriptURL}
+}
+
+// HandleSettingsUmami handles GET/POST for Umami analytics JSON settings.
+func (h *Handlers) HandleSettingsUmami(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		settings := h.loadUmamiSettings()
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(settings)
+
+	case http.MethodPost:
+		url := r.FormValue("url")
+		websiteID := r.FormValue("websiteId")
+		scriptURL := r.FormValue("scriptUrl")
+
+		if url != "" && !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+			h.logger.Errorc(r.Context(), "Invalid umami URL scheme", "url", url)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprint(w, `{"error":"url must start with http:// or https://"}`)
+			return
+		}
+
+		if err := h.store.SetSetting("umami_url", url); err != nil {
+			h.logger.Errorc(r.Context(), "Failed to save umami URL", "error", err.Error())
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprint(w, `{"error":"internal error"}`)
+			return
+		}
+		if err := h.store.SetSetting("umami_website_id", websiteID); err != nil {
+			h.logger.Errorc(r.Context(), "Failed to save umami website ID", "error", err.Error())
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprint(w, `{"error":"internal error"}`)
+			return
+		}
+		if err := h.store.SetSetting("umami_script_url", scriptURL); err != nil {
+			h.logger.Errorc(r.Context(), "Failed to save umami script URL", "error", err.Error())
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprint(w, `{"error":"internal error"}`)
+			return
+		}
+		h.logger.Infoc(r.Context(), "Umami analytics settings updated")
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"ok"}`)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// HandleSettingsUmamiHTML renders the Umami analytics settings form as an HTML fragment.
+func (h *Handlers) HandleSettingsUmamiHTML(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	settings := h.loadUmamiSettings()
+
+	w.Header().Set("Content-Type", "text/html")
+	fmt.Fprintf(w, `<div class="admin-settings-umami">
+  <h3>Umami Analytics</h3>
+  <p class="settings-desc">Configure self-hosted <a href="https://umami.is" target="_blank" rel="noopener">Umami</a> analytics tracking.</p>
+  <form hx-post="/api/admin/settings/umami" hx-target="#umami-status" hx-swap="innerHTML">
+    <div class="form-field">
+      <label for="umami-url">Server URL</label>
+      <input type="url" id="umami-url" name="url" placeholder="https://analytics.example.com" value="%s">
+    </div>
+    <div class="form-field">
+      <label for="umami-website-id">Website ID</label>
+      <input type="text" id="umami-website-id" name="websiteId" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" value="%s">
+    </div>
+    <div class="form-field">
+      <label for="umami-script-url">Script URL <span class="field-optional">(optional)</span></label>
+      <input type="url" id="umami-script-url" name="scriptUrl" placeholder="https://analytics.example.com/script.js" value="%s">
+      <p class="field-hint">Defaults to &lt;Server URL&gt;/script.js if not set.</p>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Save</button>
+      <span id="umami-status"></span>
+    </div>
+  </form>
+  <div class="settings-notice">
+    <p>After saving, the Umami tracking script will be injected into every page when both Server URL and Website ID are set.</p>
+  </div>
+</div>`,
+		html.EscapeString(settings.URL),
+		html.EscapeString(settings.WebsiteID),
+		html.EscapeString(settings.ScriptURL))
+}

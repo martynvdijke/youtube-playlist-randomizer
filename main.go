@@ -263,18 +263,33 @@ func main() {
 	})
 	mux.HandleFunc("/api/admin/settings/email", adminHandlers.HandleSettingsEmail)
 	mux.HandleFunc("/api/admin/settings/ai", adminHandlers.HandleSettingsAI)
+	mux.HandleFunc("/api/admin/settings/umami", adminHandlers.HandleSettingsUmami)
+	mux.HandleFunc("/api/admin/settings/umami/html", adminHandlers.HandleSettingsUmamiHTML)
 
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
 			http.NotFound(w, r)
 			return
 		}
-		html, err := os.ReadFile("static/index.html")
+		pageHTML, err := os.ReadFile("static/index.html")
 		if err != nil {
 			http.Error(w, "Internal error", http.StatusInternalServerError)
 			return
 		}
-		content := strings.Replace(string(html), `id="version-badge"></span>`, fmt.Sprintf(`id="version-badge">v%s</span>`, version), 1)
+		content := strings.Replace(string(pageHTML), `id="version-badge"></span>`, fmt.Sprintf(`id="version-badge">v%s</span>`, version), 1)
+
+		// Inject Umami tracking script if configured
+		umamiURL, _ := db.GetSetting("umami_url")
+		umamiWebsiteID, _ := db.GetSetting("umami_website_id")
+		if umamiURL != "" && umamiWebsiteID != "" {
+			umamiScriptURL, _ := db.GetSetting("umami_script_url")
+			if umamiScriptURL == "" {
+				umamiScriptURL = strings.TrimRight(umamiURL, "/") + "/script.js"
+			}
+			scriptTag := fmt.Sprintf(`<script defer src="%s" data-website-id="%s"></script>`, html.EscapeString(umamiScriptURL), html.EscapeString(umamiWebsiteID))
+			content = strings.Replace(content, "<!-- umami -->", scriptTag, 1)
+		}
+
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprint(w, content)
 	})

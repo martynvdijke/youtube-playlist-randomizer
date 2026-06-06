@@ -6,6 +6,7 @@
 <title>YouTube Playlist Randomizer</title>
 <link rel="stylesheet" href="/static/style.css">
 <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+<!-- umami -->
 <script defer src="/static/js/app.js"></script>
 </head>
 <body>
@@ -55,7 +56,7 @@
 <div id="admin-panel">
   <div class="admin-tabs">
     <button class="admin-tab active" hx-get="/api/admin/logs/html" hx-target="#admin-content" hx-swap="innerHTML" hx-trigger="click">Logs</button>
-    <button class="admin-tab" onclick="alert('Settings coming soon — use the Logs tab to configure log verbosity.')">Settings</button>
+    <button class="admin-tab" hx-get="/api/admin/settings/umami/html" hx-target="#admin-content" hx-swap="innerHTML" hx-trigger="click">Settings</button>
   </div>
   <div id="admin-content" hx-get="/api/admin/logs/html" hx-trigger="load" hx-swap="innerHTML">
     Loading logs...

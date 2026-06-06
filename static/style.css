@@ -730,3 +730,101 @@ a.btn-primary:hover {
 .admin-settings p {
   margin-bottom: 8px;
 }
+
+/* Umami Analytics Settings Form */
+.admin-settings-umami {
+  padding: 4px 0;
+}
+
+.admin-settings-umami h3 {
+  font-size: 16px;
+  color: #eee;
+  margin-bottom: 4px;
+}
+
+.settings-desc {
+  font-size: 13px;
+  color: #888;
+  margin-bottom: 20px;
+}
+
+.settings-desc a {
+  color: #42a5f5;
+  text-decoration: none;
+}
+
+.settings-desc a:hover {
+  text-decoration: underline;
+}
+
+.form-field {
+  margin-bottom: 16px;
+}
+
+.form-field label {
+  display: block;
+  font-size: 13px;
+  color: #aaa;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.field-optional {
+  font-weight: 400;
+  color: #666;
+  font-size: 12px;
+}
+
+.field-hint {
+  font-size: 12px;
+  color: #666;
+  margin-top: 4px;
+}
+
+.form-field input[type="url"],
+.form-field input[type="text"] {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #333;
+  border-radius: 6px;
+  background: #0f0f0f;
+  color: #eee;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+
+.form-field input:focus {
+  border-color: #ff4444;
+}
+
+.form-field input::placeholder {
+  color: #555;
+}
+
+.form-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+#umami-status {
+  font-size: 13px;
+}
+
+#umami-status:empty {
+  display: none;
+}
+
+.settings-notice {
+  margin-top: 20px;
+  padding: 10px 14px;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #888;
+  line-height: 1.5;
+}
