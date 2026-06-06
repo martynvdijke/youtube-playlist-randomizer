@@ -1,3 +1,10 @@
+# [1.11.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.10.0...v1.11.0) (2026-06-06)
+
+
+### Features
+
+* enrich OTel admin panel with traces/metrics toggles, sample rate, and headers config ([ec1186f](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/ec1186f870700383bf664c01ffe20ab8744e38b9))
+
 # [1.10.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.9.0...v1.10.0) (2026-06-06)
 
 
