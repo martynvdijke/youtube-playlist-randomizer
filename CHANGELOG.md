@@ -1,3 +1,10 @@
+# [1.9.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.8.0...v1.9.0) (2026-06-06)
+
+
+### Features
+
+* self-hosted Umami analytics support via admin panel ([1479b0c](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/1479b0c8385d85a394a15b0eec530606d9364ff1))
+
 # [1.8.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.7.4...v1.8.0) (2026-06-06)
 
 
