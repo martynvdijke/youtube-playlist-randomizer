@@ -1,3 +1,15 @@
+# [1.10.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.9.0...v1.10.0) (2026-06-06)
+
+
+### Bug Fixes
+
+* restore package-level db assignment in main ([1abee76](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/1abee76607f5ef22bac140b66cf8e4035970f367))
+
+
+### Features
+
+* add OTel endpoint admin configuration with DB-backed settings ([2bd58a1](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/2bd58a133709f6fed301b20445c85ee2dd4073dc))
+
 # [1.9.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.8.0...v1.9.0) (2026-06-06)
 
 
