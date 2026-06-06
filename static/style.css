@@ -828,3 +828,75 @@ a.btn-primary:hover {
   color: #888;
   line-height: 1.5;
 }
+
+.settings-notice-restart {
+  background: #2a1a1a;
+  border-color: #5a2a2a;
+  color: #ff8a8a;
+}
+
+/* OTel settings form */
+.admin-settings-otel h3 {
+  font-size: 16px;
+  color: #eee;
+  margin-bottom: 4px;
+}
+
+.form-field-row {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #ccc;
+}
+
+.toggle-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #ff4444;
+  cursor: pointer;
+}
+
+.toggle-text {
+  font-weight: 500;
+}
+
+.form-field textarea {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #333;
+  border-radius: 6px;
+  background: #0f0f0f;
+  color: #eee;
+  font-size: 13px;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  outline: none;
+  transition: border-color 0.2s;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.form-field textarea:focus {
+  border-color: #ff4444;
+}
+
+#otel-status {
+  font-size: 13px;
+}
+
+#otel-status:empty {
+  display: none;
+}
+
+#otel-status .restart-required {
+  color: #ff9800;
+  font-weight: 500;
+}

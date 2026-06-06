@@ -174,17 +174,40 @@ func (h *Handlers) HandleLogLevelGet(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleLogLevelSet updates the log level and applies it to the logger.
-// otelSettings holds the OpenTelemetry endpoint configuration.
-type otelSettings struct {
-	Endpoint string `json:"endpoint"`
+// otelAdminSettings holds the OpenTelemetry configuration as stored in DB.
+type otelAdminSettings struct {
+	Endpoint        string `json:"endpoint"`
+	TracesEnabled   string `json:"tracesEnabled"`
+	MetricsEnabled  string `json:"metricsEnabled"`
+	TraceSampleRate string `json:"traceSampleRate"`
+	Headers         string `json:"headers"`
 }
 
-func (h *Handlers) loadOTelSettings() otelSettings {
-	endpoint, _ := h.store.GetSetting("otel_endpoint")
-	return otelSettings{Endpoint: endpoint}
+func (h *Handlers) loadOTelSettings() otelAdminSettings {
+	get := func(key, def string) string {
+		v, _ := h.store.GetSetting(key)
+		if v == "" {
+			return def
+		}
+		return v
+	}
+	return otelAdminSettings{
+		Endpoint:        get("otel_endpoint", ""),
+		TracesEnabled:   get("otel_traces_enabled", "true"),
+		MetricsEnabled:  get("otel_metrics_enabled", "true"),
+		TraceSampleRate: get("otel_trace_sample_rate", "1.0"),
+		Headers:         get("otel_headers", ""),
+	}
 }
 
-// HandleSettingsOTel handles GET/POST for OpenTelemetry endpoint settings.
+func checked(val, expected string) string {
+	if val == expected {
+		return ` checked`
+	}
+	return ""
+}
+
+// HandleSettingsOTel handles GET/POST for OpenTelemetry settings.
 func (h *Handlers) HandleSettingsOTel(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -194,32 +217,77 @@ func (h *Handlers) HandleSettingsOTel(w http.ResponseWriter, r *http.Request) {
 
 	case http.MethodPost:
 		endpoint := r.FormValue("endpoint")
+		tracesEnabled := r.FormValue("tracesEnabled")
+		metricsEnabled := r.FormValue("metricsEnabled")
+		traceSampleRate := r.FormValue("traceSampleRate")
+		headers := r.FormValue("headers")
+
+		if tracesEnabled == "" {
+			tracesEnabled = "false"
+		}
+		if metricsEnabled == "" {
+			metricsEnabled = "false"
+		}
+		if traceSampleRate == "" {
+			traceSampleRate = "1.0"
+		}
 
 		if endpoint != "" && !strings.HasPrefix(endpoint, "http://") && !strings.HasPrefix(endpoint, "https://") {
 			h.logger.Errorc(r.Context(), "Invalid OTel endpoint URL scheme", "url", endpoint)
-			w.Header().Set("Content-Type", "application/json")
+			w.Header().Set("Content-Type", "text/html")
 			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprint(w, `{"error":"url must start with http:// or https://"}`)
+			fmt.Fprint(w, `<span class="error">URL must start with http:// or https://</span>`)
 			return
 		}
 
-		if err := h.store.SetSetting("otel_endpoint", endpoint); err != nil {
-			h.logger.Errorc(r.Context(), "Failed to save OTel endpoint", "error", err.Error())
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprint(w, `{"error":"internal error"}`)
+		// Validate sample rate
+		if rate, err := strconv.ParseFloat(traceSampleRate, 64); err != nil || rate < 0 || rate > 1 {
+			h.logger.Errorc(r.Context(), "Invalid OTel trace sample rate", "rate", traceSampleRate)
+			w.Header().Set("Content-Type", "text/html")
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprint(w, `<span class="error">Trace sample rate must be a number between 0 and 1</span>`)
 			return
 		}
-		h.logger.Infoc(r.Context(), "OTel endpoint updated")
-		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprint(w, `{"status":"ok"}`)
+
+		// Validate headers is valid JSON object if not empty
+		if headers != "" {
+			var dummy map[string]string
+			if err := json.Unmarshal([]byte(headers), &dummy); err != nil {
+				h.logger.Errorc(r.Context(), "Invalid OTel headers JSON", "error", err.Error())
+				w.Header().Set("Content-Type", "text/html")
+				w.WriteHeader(http.StatusBadRequest)
+				fmt.Fprint(w, `<span class="error">Headers must be a valid JSON object</span>`)
+				return
+			}
+		}
+
+		saves := map[string]string{
+			"otel_endpoint":          endpoint,
+			"otel_traces_enabled":    tracesEnabled,
+			"otel_metrics_enabled":   metricsEnabled,
+			"otel_trace_sample_rate": traceSampleRate,
+			"otel_headers":           headers,
+		}
+		for key, val := range saves {
+			if err := h.store.SetSetting(key, val); err != nil {
+				h.logger.Errorc(r.Context(), "Failed to save OTel setting", "key", key, "error", err.Error())
+				w.Header().Set("Content-Type", "text/html")
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprint(w, `<span class="error">Failed to save setting</span>`)
+				return
+			}
+		}
+
+		h.logger.Infoc(r.Context(), "OTel settings updated", "traces", tracesEnabled, "metrics", metricsEnabled, "sample_rate", traceSampleRate)
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprintf(w, `<span class="restart-required">✓ Saved — restart required to apply</span>`)
 
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 	}
 }
 
-// HandleSettingsOTelHTML renders the OTel endpoint settings form as an HTML fragment.
+// HandleSettingsOTelHTML renders the OTel settings form as an HTML fragment.
 func (h *Handlers) HandleSettingsOTelHTML(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -231,19 +299,47 @@ func (h *Handlers) HandleSettingsOTelHTML(w http.ResponseWriter, r *http.Request
 	w.Header().Set("Content-Type", "text/html")
 	fmt.Fprintf(w, `<div class="admin-settings-otel">
   <h3>OpenTelemetry</h3>
-  <p class="settings-desc">Configure an OTLP endpoint to send traces and metrics to a collector (e.g. Grafana Tempo, SigNoz, Grafana Cloud).</p>
+  <p class="settings-desc">Configure OTLP exporting for traces and metrics. Changes require a server restart to take effect.</p>
   <form hx-post="/api/admin/settings/otel" hx-target="#otel-status" hx-swap="innerHTML">
     <div class="form-field">
       <label for="otel-endpoint">OTLP Endpoint URL</label>
       <input type="url" id="otel-endpoint" name="endpoint" placeholder="http://otel-collector:4318" value="%s">
-      <p class="field-hint">Leave empty to disable OTLP exporting. Uses <code>OTEL_EXPORTER_OTLP_ENDPOINT</code> env var as fallback.</p>
+      <p class="field-hint">Leave empty to disable OTLP exporting. Falls back to <code>OTEL_EXPORTER_OTLP_ENDPOINT</code> env var.</p>
+    </div>
+    <div class="form-field form-field-row">
+      <label class="toggle-label">
+        <input type="checkbox" name="tracesEnabled" value="true"%s>
+        <span class="toggle-text">Enable Traces</span>
+      </label>
+      <label class="toggle-label">
+        <input type="checkbox" name="metricsEnabled" value="true"%s>
+        <span class="toggle-text">Enable Metrics</span>
+      </label>
+    </div>
+    <div class="form-field">
+      <label for="otel-sample-rate">Trace Sample Rate</label>
+      <input type="text" id="otel-sample-rate" name="traceSampleRate" placeholder="1.0" value="%s">
+      <p class="field-hint">Value between 0.0 (no traces) and 1.0 (all traces). Applied when traces are enabled.</p>
+    </div>
+    <div class="form-field">
+      <label for="otel-headers">OTLP Headers <span class="field-optional">(optional JSON)</span></label>
+      <textarea id="otel-headers" name="headers" rows="3" placeholder='{"Authorization":"Bearer my-api-key"}'>%s</textarea>
+      <p class="field-hint">JSON object of headers sent with every OTLP request. Supports env var expansion (e.g. <code>${OTEL_AUTH_TOKEN}</code>).</p>
     </div>
     <div class="form-actions">
       <button type="submit" class="btn btn-primary">Save</button>
       <span id="otel-status"></span>
     </div>
   </form>
-</div>`, html.EscapeString(settings.Endpoint))
+  <div class="settings-notice settings-notice-restart">
+    <p>⚠️ Saving settings stores them in the database. You must restart the server for new OTel settings to take effect.</p>
+  </div>
+</div>`,
+		html.EscapeString(settings.Endpoint),
+		checked(settings.TracesEnabled, "true"),
+		checked(settings.MetricsEnabled, "true"),
+		html.EscapeString(settings.TraceSampleRate),
+		html.EscapeString(settings.Headers))
 }
 
 func (h *Handlers) HandleLogLevelSet(w http.ResponseWriter, r *http.Request) {

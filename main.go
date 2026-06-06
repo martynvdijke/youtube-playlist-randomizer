@@ -167,8 +167,25 @@ func main() {
 	defer db.Close()
 
 	// Initialize telemetry after DB is open to read OTel settings
-	otelEndpoint, _ := db.GetSetting("otel_endpoint")
-	otel, err = telemetry.New(otelEndpoint)
+	otelCfg := telemetry.DefaultSettings()
+	if endp, _ := db.GetSetting("otel_endpoint"); endp != "" {
+		otelCfg.Endpoint = endp
+	}
+	if te, _ := db.GetSetting("otel_traces_enabled"); te == "false" {
+		otelCfg.TracesEnabled = false
+	}
+	if me, _ := db.GetSetting("otel_metrics_enabled"); me == "false" {
+		otelCfg.MetricsEnabled = false
+	}
+	if sr, _ := db.GetSetting("otel_trace_sample_rate"); sr != "" {
+		if r, err := strconv.ParseFloat(sr, 64); err == nil {
+			otelCfg.TraceSampleRate = r
+		}
+	}
+	if hdrs, _ := db.GetSetting("otel_headers"); hdrs != "" {
+		otelCfg.Headers = telemetry.ParseHeadersJSON(hdrs)
+	}
+	otel, err = telemetry.New(otelCfg)
 	if err != nil {
 		log.Printf("warning: failed to initialize telemetry: %v", err)
 		otel = nil

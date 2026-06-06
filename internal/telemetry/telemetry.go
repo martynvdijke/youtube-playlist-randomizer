@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"time"
@@ -25,6 +26,29 @@ func serviceName() string {
 	return "youtube-playlist-randomizer"
 }
 
+// Settings holds all configurable telemetry options.
+type Settings struct {
+	// Endpoint is the OTLP HTTP endpoint URL.
+	// Falls back to OTEL_EXPORTER_OTLP_ENDPOINT env var if empty.
+	Endpoint string
+
+	// TracesEnabled controls whether traces are exported.
+	// When false, a no-op TracerProvider is used.
+	TracesEnabled bool
+
+	// MetricsEnabled controls whether metrics are exported.
+	// When false, a no-op MeterProvider is used.
+	MetricsEnabled bool
+
+	// TraceSampleRate is the probability (0.0–1.0) for trace sampling.
+	// Defaults to 1.0 (export all traces).
+	TraceSampleRate float64
+
+	// Headers are custom headers sent with every OTLP export request.
+	// Map keys are header names, values are header values.
+	Headers map[string]string
+}
+
 type Telemetry struct {
 	TracerProvider *sdktrace.TracerProvider
 	MeterProvider  *sdkmetric.MeterProvider
@@ -46,12 +70,21 @@ type Telemetry struct {
 	ItemsInserted metric.Int64Counter
 
 	YouTubeAPICalls metric.Int64Counter
+
+	// settings applied on creation
+	cfg Settings
 }
 
-// New creates a Telemetry instance with an optional OTLP endpoint.
-// If endpoint is empty, it falls back to the OTEL_EXPORTER_OTLP_ENDPOINT env var.
-func New(endpoint string) (*Telemetry, error) {
+// New creates a Telemetry instance with the given settings.
+// An empty Endpoint falls back to the OTEL_EXPORTER_OTLP_ENDPOINT env var.
+// If TracesEnabled or MetricsEnabled is false, the corresponding provider
+// is a no-op (no export). TraceSampleRate defaults to 1.0 when zero.
+func New(cfg Settings) (*Telemetry, error) {
 	name := serviceName()
+
+	if cfg.TraceSampleRate <= 0 || cfg.TraceSampleRate > 1 {
+		cfg.TraceSampleRate = 1.0
+	}
 
 	res, err := resource.New(context.Background(),
 		resource.WithAttributes(
@@ -63,18 +96,26 @@ func New(endpoint string) (*Telemetry, error) {
 		return nil, fmt.Errorf("create resource: %w", err)
 	}
 
+	endpoint := cfg.Endpoint
 	if endpoint == "" {
 		endpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 	}
 
+	hasExportTarget := endpoint != ""
+
 	var tp *sdktrace.TracerProvider
 	var mp *sdkmetric.MeterProvider
 
-	if endpoint == "" {
+	// --- TracerProvider ---
+	if !cfg.TracesEnabled || !hasExportTarget {
 		tp = sdktrace.NewTracerProvider()
-		mp = sdkmetric.NewMeterProvider()
 	} else {
-		traceExporter, err := otlptracehttp.New(context.Background())
+		traceOpts := []otlptracehttp.Option{}
+		if len(cfg.Headers) > 0 {
+			traceOpts = append(traceOpts, otlptracehttp.WithHeaders(cfg.Headers))
+		}
+
+		traceExporter, err := otlptracehttp.New(context.Background(), traceOpts...)
 		if err != nil {
 			return nil, fmt.Errorf("create trace exporter: %w", err)
 		}
@@ -84,10 +125,23 @@ func New(endpoint string) (*Telemetry, error) {
 				sdktrace.WithBatchTimeout(5*time.Second),
 			),
 			sdktrace.WithResource(res),
+			sdktrace.WithSampler(sdktrace.ParentBased(
+				sdktrace.TraceIDRatioBased(cfg.TraceSampleRate),
+			)),
 		)
 		otel.SetTracerProvider(tp)
+	}
 
-		metricExporter, err := otlpmetrichttp.New(context.Background())
+	// --- MeterProvider ---
+	if !cfg.MetricsEnabled || !hasExportTarget {
+		mp = sdkmetric.NewMeterProvider()
+	} else {
+		metricOpts := []otlpmetrichttp.Option{}
+		if len(cfg.Headers) > 0 {
+			metricOpts = append(metricOpts, otlpmetrichttp.WithHeaders(cfg.Headers))
+		}
+
+		metricExporter, err := otlpmetrichttp.New(context.Background(), metricOpts...)
 		if err != nil {
 			return nil, fmt.Errorf("create metric exporter: %w", err)
 		}
@@ -109,6 +163,7 @@ func New(endpoint string) (*Telemetry, error) {
 		MeterProvider:  mp,
 		Tracer:         tracer,
 		Meter:          meter,
+		cfg:            cfg,
 	}
 
 	if err := t.initInstruments(); err != nil {
@@ -116,6 +171,33 @@ func New(endpoint string) (*Telemetry, error) {
 	}
 
 	return t, nil
+}
+
+// DefaultSettings returns a Settings with sensible defaults:
+// traces and metrics enabled, sample rate 1.0, no endpoint.
+func DefaultSettings() Settings {
+	return Settings{
+		TracesEnabled:   true,
+		MetricsEnabled:  true,
+		TraceSampleRate: 1.0,
+	}
+}
+
+// ParseHeadersJSON parses a JSON object string into a map suitable for OTLP headers.
+// Returns an empty map on empty input or parse error.
+func ParseHeadersJSON(raw string) map[string]string {
+	raw = os.ExpandEnv(raw)
+	if raw == "" {
+		return nil
+	}
+	var h map[string]string
+	if err := json.Unmarshal([]byte(raw), &h); err != nil {
+		return nil
+	}
+	if len(h) == 0 {
+		return nil
+	}
+	return h
 }
 
 func (t *Telemetry) initInstruments() error {

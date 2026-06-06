@@ -25,7 +25,7 @@ func TestServiceNameEnvVar(t *testing.T) {
 
 func newTestTelemetry(t *testing.T) *Telemetry {
 	t.Helper()
-	tel, err := New("")
+	tel, err := New(DefaultSettings())
 	if err != nil {
 		t.Fatalf("New() returned error: %v", err)
 	}
