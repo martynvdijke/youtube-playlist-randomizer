@@ -1,3 +1,10 @@
+# [1.8.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.7.4...v1.8.0) (2026-06-06)
+
+
+### Features
+
+* central logging admin panel with OTEL export, verbosity control, settings onboarding ([5fb9f41](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/5fb9f41c4401a48ce29dd52d2f6e15ecc80afee6))
+
 ## [1.7.4](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.7.3...v1.7.4) (2026-06-03)
 
 ## [1.7.3](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.7.2...v1.7.3) (2026-06-02)
