@@ -31,7 +31,7 @@ jobs:
     steps:
       - name: Export workflow
         uses: corentinmusard/otel-cicd-action@v4
-        with:
+          continue-on-error: true        with:
           otlpEndpoint: ${{ secrets.OTLP_ENDPOINT }}
           otlpHeaders: ${{ secrets.OTLP_HEADERS }}
           githubToken: ${{ secrets.GITHUB_TOKEN }}
