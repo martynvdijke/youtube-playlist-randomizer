@@ -226,8 +226,12 @@ func main() {
 
 		ytClient, err = youtube.NewClient(ctx, secretPath, dataDir, otel)
 		if err != nil {
-			log.Printf("WARNING: Failed to create YouTube client: %v", err)
-			log.Printf("Server will start without YouTube API access. Re-authenticate to restore functionality.")
+			if err == youtube.ErrNoToken {
+				log.Printf("No cached OAuth token found. YouTube API not available until user authenticates via the web UI.")
+			} else {
+				log.Printf("WARNING: Failed to create YouTube client: %v", err)
+				log.Printf("Server will start without YouTube API access. Re-authenticate to restore functionality.")
+			}
 			ytClient = nil
 		}
 
@@ -396,7 +400,11 @@ func handlePlaylists(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if ytClient == nil {
-		writeJSON(w, http.StatusOK, []PlaylistResponse{})
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"playlists":  []PlaylistResponse{},
+			"authNeeded": true,
+			"authURL":    oauthURL(),
+		})
 		return
 	}
 
@@ -656,14 +664,23 @@ func handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 </body></html>`)
 }
 
-func handleAuth(w http.ResponseWriter, r *http.Request) {
+func oauthURL() string {
 	if oauthSetup == nil {
-		http.Error(w, "OAuth not configured (no client_secret.json found)", http.StatusInternalServerError)
+		return ""
+	}
+	return youtube.AuthURL(oauthSetup)
+}
+
+func renderAuthRequired(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html")
+	if oauthSetup == nil {
+		fmt.Fprint(w, `<div class="auth-error">
+  <p><strong>OAuth not configured.</strong></p>
+  <p style="margin:12px 0;color:#8899aa">No client_secret.json found. Upload it via your Docker volume mount and restart.</p>
+</div>`)
 		return
 	}
-
-	url := youtube.AuthURL(oauthSetup)
-	w.Header().Set("Content-Type", "text/html")
+	url := oauthURL()
 	fmt.Fprintf(w, `<div class="auth-error">
   <p><strong>YouTube API authentication required.</strong></p>
   <p style="margin:12px 0;color:#8899aa">Sign in with Google to allow shuffle access to your playlists.</p>
@@ -672,6 +689,10 @@ func handleAuth(w http.ResponseWriter, r *http.Request) {
   </div>
   <p style="font-size:12px;color:#668">After signing in you'll be redirected back — then <a href="/" style="color:#ff4444">reload the app</a>.</p>
 </div>`, html.EscapeString(url))
+}
+
+func handleAuth(w http.ResponseWriter, r *http.Request) {
+	renderAuthRequired(w, r)
 }
 
 func writeQuotaPct(used, limit int) (float64, string) {
@@ -709,8 +730,7 @@ func handlePlaylistsHTML(w http.ResponseWriter, r *http.Request) {
 	query := strings.ToLower(r.URL.Query().Get("q"))
 
 	if ytClient == nil {
-		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprint(w, `<p>No playlists found.</p>`)
+		renderAuthRequired(w, r)
 		return
 	}
 
@@ -1148,10 +1168,11 @@ func runJob(ctx context.Context, jobID string, jp *jobProgress, playlistID, newN
 		done := jp.Done + 1
 		updateProgress(done, jp.Total, "")
 
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 
-		if done%100 == 0 {
+		if done%50 == 0 {
 			log.Printf("Inserted %d/%d items for job %s", done, jp.Total, jobID)
+			time.Sleep(1 * time.Second)
 		}
 	}
 
@@ -1279,10 +1300,11 @@ func resumeJob(ctx context.Context, j store.Job, jp *jobProgress) {
 			done := jp.Done + 1
 			updateProgress(done, jp.Total)
 
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(100 * time.Millisecond)
 
-			if done%100 == 0 {
+			if done%50 == 0 {
 				log.Printf("Resume: inserted %d/%d items for job %s", done, jp.Total, j.ID)
+				time.Sleep(1 * time.Second)
 			}
 		}
 

@@ -35,6 +35,8 @@ type OAuthSetup struct {
 	SecretDir string
 }
 
+var ErrNoToken = errors.New("no cached OAuth token found — authentication required")
+
 func NewClient(ctx context.Context, clientSecretPath, tokenDir string, otel *telemetry.Telemetry) (*Client, error) {
 	data, err := os.ReadFile(clientSecretPath)
 	if err != nil {
@@ -53,8 +55,7 @@ func NewClient(ctx context.Context, clientSecretPath, tokenDir string, otel *tel
 
 	token, err := tokenFromFile(tokenCachePath)
 	if err != nil {
-		log.Printf("No cached token found at %s.", tokenCachePath)
-		return nil, nil
+		return nil, ErrNoToken
 	}
 
 	_, client, err := createServiceWithToken(ctx, config, token, tokenCachePath, otel)
@@ -67,11 +68,11 @@ func NewClient(ctx context.Context, clientSecretPath, tokenDir string, otel *tel
 		os.Remove(tokenCachePath)
 		backupPath := filepath.Join(filepath.Dir(clientSecretPath), tokenFileName)
 		os.Remove(backupPath)
-		return nil, nil
+		return nil, ErrNoToken
 	}
 
 	log.Printf("Token validation error (unexpected): %v", err)
-	return nil, nil
+	return nil, ErrNoToken
 }
 
 func createServiceWithToken(ctx context.Context, config *oauth2.Config, token *oauth2.Token, tokenCachePath string, otel *telemetry.Telemetry) (*youtube.Service, *Client, error) {
@@ -219,7 +220,6 @@ func (c *Client) InsertPlaylistItem(ctx context.Context, playlistID, videoID str
 	item := &youtube.PlaylistItem{
 		Snippet: &youtube.PlaylistItemSnippet{
 			PlaylistId: playlistID,
-			Position:   position,
 			ResourceId: &youtube.ResourceId{
 				Kind:    "youtube#video",
 				VideoId: videoID,
