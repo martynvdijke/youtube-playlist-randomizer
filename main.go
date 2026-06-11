@@ -596,7 +596,7 @@ func handleJobQueueHTML(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fmt.Fprint(w, `<div id="job-queue" class="job-queue">`)
-	fmt.Fprint(w, `<h3>Resume Queue</h3><table class="job-table"><thead><tr><th>Status</th><th>Playlist</th><th>New Name</th><th>Progress</th><th>Created</th></tr></thead><tbody>`)
+	fmt.Fprint(w, `<h3>Resume Queue</h3><table class="job-table"><thead><tr><th>Status</th><th>Playlist</th><th>New Name</th><th>Progress</th><th>Created</th><th>Action</th></tr></thead><tbody>`)
 	for _, j := range jobs {
 		label := j.SourceTitle
 		if label == "" {
@@ -613,10 +613,27 @@ func handleJobQueueHTML(w http.ResponseWriter, r *http.Request) {
 			created = created[:19]
 		}
 		created = strings.Replace(created, "T", " ", 1)
-		fmt.Fprintf(w, `<tr><td class="status-%s">%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>`,
+
+		var actionCell string
+		switch j.Status {
+		case "paused", "pending", "fetching", "shuffling", "inserting":
+			actionCell = fmt.Sprintf(
+				`<button class="btn btn-warning btn-sm" hx-post="/api/jobs/resume" hx-vals='{"jobId":%q}' hx-target="closest tr" hx-swap="outerHTML" hx-confirm="Resume this job now?">Resume Now</button>`,
+				j.ID,
+			)
+		case "complete":
+			actionCell = `<span class="status-complete">Done</span>`
+		case "error":
+			actionCell = `<span class="status-error" title="%s">Error</span>`
+		default:
+			actionCell = ""
+		}
+
+		fmt.Fprintf(w, `<tr><td class="status-%s">%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>`,
 			html.EscapeString(j.Status), html.EscapeString(j.Status),
 			html.EscapeString(label), html.EscapeString(j.NewName),
-			html.EscapeString(progress), html.EscapeString(created))
+			html.EscapeString(progress), html.EscapeString(created),
+			actionCell)
 	}
 	fmt.Fprint(w, `</tbody></table></div>`)
 }
