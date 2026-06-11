@@ -58,6 +58,7 @@
     <button class="admin-tab active" hx-get="/api/admin/logs/html" hx-target="#admin-content" hx-swap="innerHTML" hx-trigger="click">Logs</button>
     <button class="admin-tab" hx-get="/api/admin/settings/umami/html" hx-target="#admin-content" hx-swap="innerHTML" hx-trigger="click">Analytics</button>
     <button class="admin-tab" hx-get="/api/admin/settings/otel/html" hx-target="#admin-content" hx-swap="innerHTML" hx-trigger="click">Telemetry</button>
+    <button class="admin-tab" hx-get="/api/admin/settings/gotify/html" hx-target="#admin-content" hx-swap="innerHTML" hx-trigger="click">Notifications</button>
   </div>
   <div id="admin-content" hx-get="/api/admin/logs/html" hx-trigger="load" hx-swap="innerHTML">
     Loading logs...

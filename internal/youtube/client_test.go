@@ -214,8 +214,8 @@ func TestNewClient_NoTokenFile(t *testing.T) {
 	}
 
 	client, err := NewClient(context.Background(), secretPath, dir, nil, nil)
-	if err != nil {
-		t.Fatalf("NewClient returned error (expected nil): %v", err)
+	if err != ErrNoToken {
+		t.Fatalf("NewClient error = %v, want ErrNoToken", err)
 	}
 	if client != nil {
 		t.Fatal("expected nil client when no token file exists")
@@ -235,8 +235,8 @@ func TestNewClient_StaleToken(t *testing.T) {
 	}
 
 	client, err := NewClient(context.Background(), secretPath, dir, nil, nil)
-	if err != nil {
-		t.Fatalf("NewClient returned error (expected nil): %v", err)
+	if err != ErrNoToken {
+		t.Fatalf("NewClient error = %v, want ErrNoToken", err)
 	}
 	if client != nil {
 		t.Fatal("expected nil client for stale token with no refresh")
@@ -255,8 +255,8 @@ func TestNewClient_EmptyTokenDir(t *testing.T) {
 	}
 
 	client, err := NewClient(context.Background(), secretPath, "", nil, nil)
-	if err != nil {
-		t.Fatalf("NewClient with empty tokenDir returned error: %v", err)
+	if err != ErrNoToken {
+		t.Fatalf("NewClient error = %v, want ErrNoToken", err)
 	}
 	if client != nil {
 		t.Fatal("expected nil client (no token, empty dir should default to secret dir)")

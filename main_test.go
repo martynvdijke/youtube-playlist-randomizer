@@ -223,8 +223,11 @@ func TestHandleAuth_NoSetup(t *testing.T) {
 	req := httptest.NewRequest("GET", "/api/auth", nil)
 	handleAuth(rr, req)
 
-	if rr.Code != http.StatusInternalServerError {
-		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, rr.Code)
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status %d, got %d", http.StatusOK, rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "OAuth not configured") {
+		t.Errorf("expected 'OAuth not configured' message, got: %s", rr.Body.String())
 	}
 }
 

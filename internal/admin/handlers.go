@@ -585,3 +585,114 @@ func (h *Handlers) HandleSettingsUmamiHTML(w http.ResponseWriter, r *http.Reques
 		html.EscapeString(settings.WebsiteID),
 		html.EscapeString(settings.ScriptURL))
 }
+
+// gotifySettings holds the Gotify notification configuration.
+type gotifySettings struct {
+	URL     string `json:"url"`
+	Token   string `json:"token"`
+	Enabled string `json:"enabled"`
+}
+
+func (h *Handlers) loadGotifySettings() gotifySettings {
+	url, _ := h.store.GetSetting("gotify_url")
+	token, _ := h.store.GetSetting("gotify_token")
+	enabled, _ := h.store.GetSetting("gotify_enabled")
+	return gotifySettings{URL: url, Token: token, Enabled: enabled}
+}
+
+// HandleSettingsGotify handles GET/POST for Gotify notification settings.
+func (h *Handlers) HandleSettingsGotify(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		settings := h.loadGotifySettings()
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(settings)
+
+	case http.MethodPost:
+		url := r.FormValue("url")
+		token := r.FormValue("token")
+		enabled := r.FormValue("enabled")
+		if enabled == "" {
+			enabled = "false"
+		}
+
+		if url != "" && !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
+			h.logger.Errorc(r.Context(), "Invalid Gotify URL scheme", "url", url)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			fmt.Fprint(w, `{"error":"url must start with http:// or https://"}`)
+			return
+		}
+
+		if err := h.store.SetSetting("gotify_url", url); err != nil {
+			h.logger.Errorc(r.Context(), "Failed to save Gotify URL", "error", err.Error())
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprint(w, `{"error":"internal error"}`)
+			return
+		}
+		if err := h.store.SetSetting("gotify_token", token); err != nil {
+			h.logger.Errorc(r.Context(), "Failed to save Gotify token", "error", err.Error())
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprint(w, `{"error":"internal error"}`)
+			return
+		}
+		if err := h.store.SetSetting("gotify_enabled", enabled); err != nil {
+			h.logger.Errorc(r.Context(), "Failed to save Gotify enabled", "error", err.Error())
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprint(w, `{"error":"internal error"}`)
+			return
+		}
+
+		h.logger.Infoc(r.Context(), "Gotify notification settings updated", "enabled", enabled)
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"status":"ok"}`)
+
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// HandleSettingsGotifyHTML renders the Gotify notification settings form as an HTML fragment.
+func (h *Handlers) HandleSettingsGotifyHTML(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	settings := h.loadGotifySettings()
+
+	w.Header().Set("Content-Type", "text/html")
+	fmt.Fprintf(w, `<div class="admin-settings-gotify">
+  <h3>Gotify Notifications</h3>
+  <p class="settings-desc">Configure push notifications via a self-hosted <a href="https://gotify.net" target="_blank" rel="noopener">Gotify</a> server. Notifications are sent when a playlist shuffle completes, fails, or pauses.</p>
+  <form hx-post="/api/admin/settings/gotify" hx-target="#gotify-status" hx-swap="innerHTML">
+    <div class="form-field">
+      <label for="gotify-url">Server URL</label>
+      <input type="url" id="gotify-url" name="url" placeholder="http://gotify:8080" value="%s">
+    </div>
+    <div class="form-field">
+      <label for="gotify-token">App Token</label>
+      <input type="password" id="gotify-token" name="token" placeholder="Gotify application token" value="%s" autocomplete="off">
+    </div>
+    <div class="form-field form-field-row">
+      <label class="toggle-label">
+        <input type="checkbox" name="enabled" value="true"%s>
+        <span class="toggle-text">Enable Notifications</span>
+      </label>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Save</button>
+      <span id="gotify-status"></span>
+    </div>
+  </form>
+  <div class="settings-notice">
+    <p>Notifications are sent immediately on job completion, failure, or pause — no restart required.</p>
+  </div>
+</div>`,
+		html.EscapeString(settings.URL),
+		html.EscapeString(settings.Token),
+		checked(settings.Enabled, "true"))
+}

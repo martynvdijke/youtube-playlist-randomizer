@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/admin"
+	"github.com/martynvdijke/youtube-playlist-randomizer/internal/gotify"
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/logging"
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/store"
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/telemetry"
@@ -90,6 +91,7 @@ var (
 	clientSecretPath string
 	logger           *logging.Logger
 	adminHandlers    *admin.Handlers
+	gotifyClient     *gotify.Client
 )
 
 func findClientSecret() string {
@@ -208,6 +210,12 @@ func main() {
 	adminHandlers = admin.New(db, logger)
 	logger.Infoc(context.Background(), "Application started", "version", version)
 
+	// Initialize Gotify client from saved settings
+	gURL, _ := db.GetSetting("gotify_url")
+	gToken, _ := db.GetSetting("gotify_token")
+	gEnabled, _ := db.GetSetting("gotify_enabled")
+	gotifyClient = gotify.New(gURL, gToken, gEnabled == "true")
+
 	ctx := context.Background()
 
 	if *mockMode {
@@ -288,6 +296,8 @@ func main() {
 	mux.HandleFunc("/api/admin/settings/ai", adminHandlers.HandleSettingsAI)
 	mux.HandleFunc("/api/admin/settings/umami", adminHandlers.HandleSettingsUmami)
 	mux.HandleFunc("/api/admin/settings/umami/html", adminHandlers.HandleSettingsUmamiHTML)
+	mux.HandleFunc("/api/admin/settings/gotify", adminHandlers.HandleSettingsGotify)
+	mux.HandleFunc("/api/admin/settings/gotify/html", adminHandlers.HandleSettingsGotifyHTML)
 	mux.HandleFunc("/api/admin/settings/otel", adminHandlers.HandleSettingsOTel)
 	mux.HandleFunc("/api/admin/settings/otel/html", adminHandlers.HandleSettingsOTelHTML)
 
@@ -1023,6 +1033,17 @@ func writeJobProgressHTML(w http.ResponseWriter, jobID string, jp *jobProgress) 
 	}
 }
 
+func sendGotifyNotification(title, message string) {
+	if gotifyClient == nil {
+		return
+	}
+	if err := gotifyClient.Send(title, message); err != nil {
+		log.Printf("warning: failed to send Gotify notification: %v", err)
+	} else {
+		logger.Infoc(context.Background(), "Gotify notification sent", "title", title)
+	}
+}
+
 func runJob(ctx context.Context, jobID string, jp *jobProgress, playlistID, newName string) {
 	var span trace.Span
 	if otel != nil {
@@ -1056,6 +1077,7 @@ func runJob(ctx context.Context, jobID string, jp *jobProgress, playlistID, newN
 		if otel != nil {
 			otel.RecordJobFailed(context.Background(), errMsg)
 		}
+		sendGotifyNotification("❌ Shuffle Failed", fmt.Sprintf("Playlist %q: %s", newName, errMsg))
 	}
 
 	updateProgress := func(done, total int, newPlaylistID string) {
@@ -1076,6 +1098,7 @@ func runJob(ctx context.Context, jobID string, jp *jobProgress, playlistID, newN
 	if quota == nil || quota.Remaining < store.QuotaListPlaylistItems {
 		log.Printf("Insufficient quota to fetch items for job %s (remaining: %d). Job will wait.", jobID, quota.Remaining)
 		updateStatus(JobPending)
+		sendGotifyNotification("⏳ Shuffle Queued", fmt.Sprintf("Playlist %q queued — waiting for API quota to become available.", newName))
 		return
 	}
 
@@ -1087,6 +1110,7 @@ func runJob(ctx context.Context, jobID string, jp *jobProgress, playlistID, newN
 			log.Printf("Quota error fetching items for job %s. Pausing.", jobID)
 			updateStatus(JobPaused)
 			db.SetJobPaused(jobID)
+			sendGotifyNotification("⏸ Shuffle Paused", fmt.Sprintf("Playlist %q paused — API quota exhausted while fetching items.", newName))
 			if otel != nil {
 				otel.RecordJobPaused(context.Background(), 0, 0)
 			}
@@ -1125,6 +1149,7 @@ func runJob(ctx context.Context, jobID string, jp *jobProgress, playlistID, newN
 			log.Printf("Quota error creating playlist for job %s. Pausing.", jobID)
 			updateStatus(JobPaused)
 			db.SetJobPaused(jobID)
+			sendGotifyNotification("⏸ Shuffle Paused", fmt.Sprintf("Playlist %q paused — API quota exhausted while creating playlist.", newName))
 			if otel != nil {
 				otel.RecordJobPaused(context.Background(), 0, jp.Total)
 			}
@@ -1156,6 +1181,7 @@ func runJob(ctx context.Context, jobID string, jp *jobProgress, playlistID, newN
 			log.Printf("Quota exhausted after %d/%d items. Job %s paused.", jp.Done, jp.Total, jobID)
 			updateStatus(JobPaused)
 			db.SetJobPaused(jobID)
+			sendGotifyNotification("⏸ Shuffle Paused", fmt.Sprintf("Playlist %q paused after %d/%d items — API quota exhausted.", newName, jp.Done, jp.Total))
 			if otel != nil {
 				otel.RecordJobPaused(context.Background(), jp.Done, jp.Total)
 			}
@@ -1167,6 +1193,7 @@ func runJob(ctx context.Context, jobID string, jp *jobProgress, playlistID, newN
 				log.Printf("Quota error during insert at %d/%d. Job %s paused.", jp.Done, jp.Total, jobID)
 				updateStatus(JobPaused)
 				db.SetJobPaused(jobID)
+				sendGotifyNotification("⏸ Shuffle Paused", fmt.Sprintf("Playlist %q paused at %d/%d items — API quota exhausted.", newName, jp.Done, jp.Total))
 				if otel != nil {
 					otel.RecordJobPaused(context.Background(), jp.Done, jp.Total)
 				}
@@ -1197,6 +1224,8 @@ func runJob(ctx context.Context, jobID string, jp *jobProgress, playlistID, newN
 	updateProgress(jp.Total, jp.Total, "")
 	updateStatus(JobDone)
 	db.SetJobDone(jobID)
+	playlistURL := fmt.Sprintf("https://www.youtube.com/playlist?list=%s", newPlaylistID)
+	sendGotifyNotification("✅ Shuffle Complete", fmt.Sprintf("Playlist %q randomized with %d items.\n%s", newName, jp.Total, playlistURL))
 	if span != nil {
 		span.SetAttributes(attribute.Int("items.total", jp.Total))
 		span.SetStatus(codes.Ok, "")
