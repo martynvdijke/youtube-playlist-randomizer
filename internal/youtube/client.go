@@ -66,14 +66,18 @@ func NewClient(ctx context.Context, clientSecretPath, tokenDir string, otel *tel
 	}
 
 	if strings.Contains(err.Error(), "token expired") || strings.Contains(err.Error(), "refresh token is not set") || strings.Contains(err.Error(), "invalid_grant") || strings.Contains(err.Error(), "Invalid Credentials") || strings.Contains(err.Error(), "authError") {
-		log.Printf("Stored token at %s is expired and cannot be refreshed. Deleting.", tokenCachePath)
+		if logger != nil {
+			logger.Infoc(ctx, fmt.Sprintf("Stored token at %s is expired and cannot be refreshed. Deleting.", tokenCachePath))
+		}
 		os.Remove(tokenCachePath)
 		backupPath := filepath.Join(filepath.Dir(clientSecretPath), tokenFileName)
 		os.Remove(backupPath)
 		return nil, ErrNoToken
 	}
 
-	log.Printf("Token validation error (unexpected): %v", err)
+	if logger != nil {
+		logger.Warnc(ctx, "Token validation error (unexpected)", "error", err.Error())
+	}
 	return nil, ErrNoToken
 }
 
@@ -93,7 +97,9 @@ func createServiceWithToken(ctx context.Context, config *oauth2.Config, token *o
 
 	if err := client.verifyToken(ctx); err != nil {
 		if IsQuotaError(err) {
-			log.Printf("Token valid but quota exhausted — returning client anyway.")
+			if logger != nil {
+				logger.Infoc(ctx, "Token valid but quota exhausted — returning client anyway.")
+			}
 			return service, client, nil
 		}
 		return nil, nil, err
