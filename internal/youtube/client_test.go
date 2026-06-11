@@ -197,7 +197,7 @@ func TestSaveAndReadToken(t *testing.T) {
 }
 
 func TestNewClient_MissingSecret(t *testing.T) {
-	client, err := NewClient(context.Background(), "/nonexistent/secret.json", t.TempDir(), nil)
+	client, err := NewClient(context.Background(), "/nonexistent/secret.json", t.TempDir(), nil, nil)
 	if err == nil {
 		t.Fatal("expected error for missing secret file")
 	}
@@ -213,7 +213,7 @@ func TestNewClient_NoTokenFile(t *testing.T) {
 		t.Fatalf("write secret: %v", err)
 	}
 
-	client, err := NewClient(context.Background(), secretPath, dir, nil)
+	client, err := NewClient(context.Background(), secretPath, dir, nil, nil)
 	if err != nil {
 		t.Fatalf("NewClient returned error (expected nil): %v", err)
 	}
@@ -234,7 +234,7 @@ func TestNewClient_StaleToken(t *testing.T) {
 		t.Fatalf("write secret: %v", err)
 	}
 
-	client, err := NewClient(context.Background(), secretPath, dir, nil)
+	client, err := NewClient(context.Background(), secretPath, dir, nil, nil)
 	if err != nil {
 		t.Fatalf("NewClient returned error (expected nil): %v", err)
 	}
@@ -254,7 +254,7 @@ func TestNewClient_EmptyTokenDir(t *testing.T) {
 		t.Fatalf("write secret: %v", err)
 	}
 
-	client, err := NewClient(context.Background(), secretPath, "", nil)
+	client, err := NewClient(context.Background(), secretPath, "", nil, nil)
 	if err != nil {
 		t.Fatalf("NewClient with empty tokenDir returned error: %v", err)
 	}

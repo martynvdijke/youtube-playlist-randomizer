@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -322,3 +323,82 @@ func TestWriteQuotaPct_EdgeCases(t *testing.T) {
 		t.Errorf("full quota should be critical, got %q", class)
 	}
 }
+
+func TestHandleJobQueueHTML_BadMethod(t *testing.T) {
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/jobs/queue/html", nil)
+	handleJobQueueHTML(rr, req)
+
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, rr.Code)
+	}
+}
+
+func TestHandleJobQueueHTML_EmptyQueue(t *testing.T) {
+	oldDB := db
+	defer func() { db = oldDB }()
+
+	s, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer s.Close()
+	db = s
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/jobs/queue/html", nil)
+	handleJobQueueHTML(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), `class="job-queue hidden"`) {
+		t.Errorf("expected hidden job-queue for empty result, got: %s", rr.Body.String())
+	}
+}
+
+func TestHandleJobQueueHTML_WithPausedJob(t *testing.T) {
+	oldDB := db
+	defer func() { db = oldDB }()
+
+	s, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer s.Close()
+	db = s
+
+	if err := db.CreateJob("test-job-1", "PL_SRC", "Source Title", "My Playlist"); err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+	if err := db.SetJobPaused("test-job-1"); err != nil {
+		t.Fatalf("pause job: %v", err)
+	}
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/jobs/queue/html", nil)
+	handleJobQueueHTML(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d", rr.Code)
+	}
+
+	body := rr.Body.String()
+	if !strings.Contains(body, "Resume Now") {
+		t.Errorf("expected Resume Now button in response, got: %s", body)
+	}
+	if !strings.Contains(body, `hx-post="/api/jobs/resume"`) {
+		t.Errorf("expected hx-post to /api/jobs/resume, got: %s", body)
+	}
+	if !strings.Contains(body, `"jobId":"test-job-1"`) {
+		t.Errorf("expected job ID in hx-vals, got: %s", body)
+	}
+	if !strings.Contains(body, `class="status-paused"`) {
+		t.Errorf("expected paused status class, got: %s", body)
+	}
+	if !strings.Contains(body, "Source Title") {
+		t.Errorf("expected source title in response, got: %s", body)
+	}
+}
+
+

@@ -224,7 +224,7 @@ func main() {
 			log.Printf("WARNING: Failed to load OAuth config: %v", err)
 		}
 
-		ytClient, err = youtube.NewClient(ctx, secretPath, dataDir, otel)
+		ytClient, err = youtube.NewClient(ctx, secretPath, dataDir, otel, logger)
 		if err != nil {
 			if err == youtube.ErrNoToken {
 				log.Printf("No cached OAuth token found. YouTube API not available until user authenticates via the web UI.")
@@ -658,7 +658,7 @@ func handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("OAuth authentication successful! Token saved. Recreating YouTube client...")
 
-	newClient, err := youtube.NewClient(context.Background(), clientSecretPath, dataDir, otel)
+	newClient, err := youtube.NewClient(context.Background(), clientSecretPath, dataDir, otel, logger)
 	if err == nil && newClient != nil {
 		ytClient = newClient
 		log.Printf("YouTube client recreated successfully!")
