@@ -154,10 +154,20 @@ main {
   color: #81c784;
   font-size: 15px;
 }
+
+/* Table wrapper for horizontal scroll on mobile */
+.job-table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 0 -16px;
+  padding: 0 16px;
+}
+
 .job-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
+  min-width: 500px;
 }
 .job-table th {
   text-align: left;
@@ -168,14 +178,31 @@ main {
   text-transform: uppercase;
   font-size: 11px;
   letter-spacing: 0.5px;
+  white-space: nowrap;
 }
 .job-table td {
   padding: 8px 10px;
   border-bottom: 1px solid #222;
   color: #ccc;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .job-table tr:hover td {
   background: #222;
+}
+/* Shrink action column to fit button */
+.job-table th:last-child,
+.job-table td:last-child {
+  max-width: none;
+  white-space: nowrap;
+  text-align: right;
+}
+/* Status column */
+.job-table td:first-child {
+  max-width: 80px;
+  white-space: nowrap;
 }
 .status-pending {
   color: #ffa726;
@@ -899,4 +926,112 @@ a.btn-primary:hover {
 #otel-status .restart-required {
   color: #ff9800;
   font-weight: 500;
+}
+
+/* Mobile Responsive */
+@media (max-width: 640px) {
+  header {
+    padding: 12px 16px;
+  }
+
+  .header-top {
+    gap: 8px;
+  }
+
+  .logo {
+    width: 28px;
+    height: 28px;
+  }
+
+  header h1 {
+    font-size: 16px;
+  }
+
+  .version-badge {
+    font-size: 10px;
+  }
+
+  main {
+    padding: 16px 12px;
+  }
+
+  .playlist-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+
+  .playlist-card .btn {
+    width: 100%;
+  }
+
+  .playlist-title {
+    font-size: 14px;
+  }
+
+  .modal-content {
+    padding: 20px;
+    width: 95%;
+    max-width: none;
+  }
+
+  .modal-content input[type="text"] {
+    font-size: 16px; /* prevent iOS zoom */
+  }
+
+  .admin-log-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .log-filters {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .log-filters input[type="text"] {
+    width: 100%;
+  }
+
+  .admin-tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+    flex-wrap: nowrap;
+  }
+
+  .admin-tab {
+    padding: 10px 16px;
+    font-size: 13px;
+    white-space: nowrap;
+  }
+
+  .form-field-row {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+}
+
+@media (max-width: 480px) {
+  .job-queue {
+    padding: 12px;
+  }
+
+  .job-table-wrapper {
+    margin: 0 -12px;
+    padding: 0 12px;
+  }
+
+  .job-table th,
+  .job-table td {
+    padding: 6px 6px;
+    font-size: 11px;
+  }
+
+  .status-complete,
+  .status-error {
+    font-size: 11px;
+  }
 }

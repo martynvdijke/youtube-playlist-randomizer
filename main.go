@@ -606,12 +606,13 @@ func handleJobQueueHTML(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fmt.Fprint(w, `<div id="job-queue" class="job-queue">`)
-	fmt.Fprint(w, `<h3>Resume Queue</h3><table class="job-table"><thead><tr><th>Status</th><th>Playlist</th><th>New Name</th><th>Progress</th><th>Created</th><th>Action</th></tr></thead><tbody>`)
+	fmt.Fprint(w, `<h3>Resume Queue</h3><div class="job-table-wrapper"><table class="job-table"><thead><tr><th>Status</th><th>Playlist</th><th>New Name</th><th>Progress</th><th>Created</th><th>Action</th></tr></thead><tbody>`)
 	for _, j := range jobs {
 		label := j.SourceTitle
 		if label == "" {
 			label = j.SourcePlaylistID
 		}
+		labelTitle := html.EscapeString(label)
 		progress := ""
 		if j.TotalItems > 0 {
 			progress = fmt.Sprintf("%d / %d", j.InsertedItems, j.TotalItems)
@@ -639,13 +640,14 @@ func handleJobQueueHTML(w http.ResponseWriter, r *http.Request) {
 			actionCell = ""
 		}
 
-		fmt.Fprintf(w, `<tr><td class="status-%s">%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td><td>%s</td></tr>`,
+			fmt.Fprintf(w, `<tr><td class="status-%s">%s</td><td title="%s">%s</td><td title="%s">%s</td><td>%s</td><td>%s</td><td>%s</td></tr>`,
 			html.EscapeString(j.Status), html.EscapeString(j.Status),
-			html.EscapeString(label), html.EscapeString(j.NewName),
+			labelTitle, html.EscapeString(label),
+			html.EscapeString(j.NewName), html.EscapeString(j.NewName),
 			html.EscapeString(progress), html.EscapeString(created),
 			actionCell)
 	}
-	fmt.Fprint(w, `</tbody></table></div>`)
+	fmt.Fprint(w, `</tbody></table></div></div>`)
 }
 
 func handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
