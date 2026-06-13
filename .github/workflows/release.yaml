@@ -9,18 +9,19 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ci:
-    uses: ./.github/workflows/ci.yaml
-    secrets: inherit
-    permissions:
-      contents: write
-      pull-requests: write
-      packages: write
-      attestations: write
-      id-token: write
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: stable
+      - run: go mod download
+      - run: go vet -tags "sqlite_fts5" ./...
+      - run: go test -tags "sqlite_fts5" -v ./...
 
   release:
-    needs: ci
+    needs: test
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
     name: Release
     runs-on: ubuntu-latest
@@ -29,7 +30,6 @@ jobs:
       contents: write
       pull-requests: write
       packages: write
-      attestations: write
       id-token: write
 
     outputs:
@@ -71,32 +71,31 @@ jobs:
         if: steps.semantic.outputs.new_release_published == 'true'
         uses: actions/setup-go@v6
         with:
-          go-version: '1.26.4'
+          go-version: stable
 
       - name: Build the Docker image
         if: steps.semantic.outputs.new_release_published == 'true'
         run: docker build . --file Dockerfile --tag martynvandijke/ypr:latest --tag ghcr.io/martynvdijke/ypr:latest
-        
+
       - name: Push Docker image
         if: steps.semantic.outputs.new_release_published == 'true'
         run: |
           VERSION=${{ steps.semantic.outputs.new_release_version }}
           docker tag martynvandijke/ypr:latest martynvandijke/ypr:$VERSION
           docker tag ghcr.io/martynvdijke/ypr:latest ghcr.io/martynvdijke/ypr:$VERSION
-          
           docker push martynvandijke/ypr:latest
           docker push martynvandijke/ypr:$VERSION
           docker push ghcr.io/martynvdijke/ypr:latest
           docker push ghcr.io/martynvdijke/ypr:$VERSION
 
   notify:
-    needs: [ci, release]
+    needs: [test, release]
     if: ${{ always() }}
     name: Gotify Notification
     runs-on: ubuntu-latest
     steps:
       - name: Release Published Notification
-        if: needs.ci.result == 'success' && needs.release.result == 'success' && needs.release.outputs.new_release_published == 'true'
+        if: needs.test.result == 'success' && needs.release.result == 'success' && needs.release.outputs.new_release_published == 'true'
         uses: eikendev/gotify-action@master
         with:
           gotify_api_base: ${{ secrets.GOTIFY_API_BASE }}
@@ -105,7 +104,7 @@ jobs:
           notification_message: '${{ github.repository }}: Version ${{ needs.release.outputs.new_release_version }} was successfully released.'
 
       - name: No Release Needed Notification
-        if: needs.ci.result == 'success' && needs.release.result == 'success' && needs.release.outputs.new_release_published != 'true'
+        if: needs.test.result == 'success' && needs.release.result == 'success' && needs.release.outputs.new_release_published != 'true'
         uses: eikendev/gotify-action@master
         with:
           gotify_api_base: ${{ secrets.GOTIFY_API_BASE }}
@@ -114,7 +113,7 @@ jobs:
           notification_message: 'Workflow passed but no new release was published.'
 
       - name: Failure Notification
-        if: needs.ci.result != 'success' || needs.release.result != 'success'
+        if: needs.test.result != 'success' || needs.release.result != 'success'
         uses: eikendev/gotify-action@master
         with:
           gotify_api_base: ${{ secrets.GOTIFY_API_BASE }}
@@ -125,14 +124,14 @@ jobs:
 
   otel:
     permissions:
-      contents: read # Required. To access the private repository
-      actions: read # Required. To read workflow runs
-      pull-requests: read # Optional. To read PR labels
-      checks: read # Optional. To read run annotations
+      contents: read
+      actions: read
+      pull-requests: read
+      checks: read
     if: always()
     name: OpenTelemetry Export Trace
     runs-on: ubuntu-latest
-    needs: [ci, release, notify]
+    needs: [test, release, notify]
     steps:
       - name: Export workflow
         uses: corentinmusard/otel-cicd-action@v4
