@@ -369,3 +369,217 @@ func TestHandleJobQueueHTML_WithPausedJob(t *testing.T) {
 		t.Errorf("expected source title in response, got: %s", body)
 	}
 }
+
+// --- Additional handler tests ---
+
+func TestHandleQuota_BadMethod(t *testing.T) {
+	h := &Handlers{}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/quota", nil)
+	h.handleQuota(rr, req)
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", rr.Code)
+	}
+}
+
+func TestHandleQuotaHTML_ReturnsHTML(t *testing.T) {
+	s, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer s.Close()
+	h := &Handlers{store: s}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/quota/html", nil)
+	h.handleQuotaHTML(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rr.Code)
+	}
+	if ct := rr.Header().Get("Content-Type"); ct != "text/html" {
+		t.Errorf("expected text/html, got %q", ct)
+	}
+	if !strings.Contains(rr.Body.String(), "quota") {
+		t.Errorf("expected quota in body, got: %s", rr.Body.String())
+	}
+}
+
+func TestHandlePlaylists_BadMethod(t *testing.T) {
+	h := &Handlers{}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/playlists", nil)
+	h.handlePlaylists(rr, req)
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", rr.Code)
+	}
+}
+
+func TestHandlePlaylists_NoYTClient(t *testing.T) {
+	h := &Handlers{}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/playlists", nil)
+	h.handlePlaylists(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "authNeeded") {
+		t.Errorf("expected authNeeded in body, got: %s", rr.Body.String())
+	}
+}
+
+func TestHandlePlaylistsHTML_NoYTClient(t *testing.T) {
+	h := &Handlers{}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/playlists/html", nil)
+	h.handlePlaylistsHTML(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "auth") && !strings.Contains(body, "OAuth") {
+		t.Errorf("expected auth/OAuth in body, got: %s", body)
+	}
+}
+
+func TestHandleModalHTML_WithParams(t *testing.T) {
+	s, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer s.Close()
+	h := &Handlers{store: s}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/modal/html?id=PL123&itemCount=10&title=TestPlaylist", nil)
+	h.handleModalHTML(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "TestPlaylist") {
+		t.Errorf("expected TestPlaylist in body, got: %s", rr.Body.String())
+	}
+}
+
+func TestHandleModalHTML_DefaultTitle(t *testing.T) {
+	s, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer s.Close()
+	h := &Handlers{store: s}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/modal/html?id=PL123&itemCount=5", nil)
+	h.handleModalHTML(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "Selected Playlist") {
+		t.Errorf("expected 'Selected Playlist' as default, got: %s", rr.Body.String())
+	}
+}
+
+func TestHandleRandomize_BadMethod(t *testing.T) {
+	h := &Handlers{}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/randomize", nil)
+	h.handleRandomize(rr, req)
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", rr.Code)
+	}
+}
+
+func TestHandleRandomize_NoYTClient(t *testing.T) {
+	h := &Handlers{}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/randomize", strings.NewReader(`{"playlistId":"PL1","newName":"test"}`))
+	req.Header.Set("Content-Type", "application/json")
+	h.handleRandomize(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestHandleRandomizeHTML_BadMethod(t *testing.T) {
+	h := &Handlers{}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/randomize/html", nil)
+	h.handleRandomizeHTML(rr, req)
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "Method not allowed") {
+		t.Errorf("expected error message, got: %s", rr.Body.String())
+	}
+}
+
+func TestHandlePlaylistPreviewHTML_BadMethod(t *testing.T) {
+	h := &Handlers{}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/playlists/preview/html", nil)
+	h.handlePlaylistPreviewHTML(rr, req)
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", rr.Code)
+	}
+}
+
+func TestHandlePlaylistPreviewHTML_MissingID(t *testing.T) {
+	h := &Handlers{}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/playlists/preview/html", nil)
+	h.handlePlaylistPreviewHTML(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "Missing") {
+		t.Errorf("expected 'Missing' in body, got: %s", rr.Body.String())
+	}
+}
+
+func TestHandlePlaylistPreviewHTML_NoYTClient(t *testing.T) {
+	h := &Handlers{}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/playlists/preview/html?id=PL123", nil)
+	h.handlePlaylistPreviewHTML(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestHandleJobStatus_BadMethod(t *testing.T) {
+	h := &Handlers{}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/jobs/xyz", nil)
+	h.handleJobStatus(rr, req)
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", rr.Code)
+	}
+}
+
+func TestHandleJobStatus_EmptyID(t *testing.T) {
+	h := &Handlers{}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/jobs/", nil)
+	h.handleJobStatus(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestHandleUndo_BadMethod(t *testing.T) {
+	h := &Handlers{}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/jobs/undo", nil)
+	h.handleUndo(rr, req)
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", rr.Code)
+	}
+}
+
+func TestHandleUndo_MissingJobID(t *testing.T) {
+	h := &Handlers{}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/jobs/undo", nil)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	h.handleUndo(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+}

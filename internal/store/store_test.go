@@ -557,3 +557,123 @@ func TestGetPendingJobs_IncludesPaused(t *testing.T) {
 		t.Error("expected paused job in GetPendingJobs results")
 	}
 }
+
+func TestCreateJobWithMultipleSources(t *testing.T) {
+	s := newTestStore(t)
+	err := s.CreateJob("job1", "pl123", "", "My-randomized", "pl456", "pl789")
+	if err != nil {
+		t.Fatalf("CreateJob failed: %v", err)
+	}
+	var ids string
+	err = s.db.QueryRow("SELECT COALESCE(source_playlist_ids,'') FROM jobs WHERE id = ?", "job1").Scan(&ids)
+	if err != nil {
+		t.Fatalf("query source_playlist_ids: %v", err)
+	}
+	// The primary ID is included in source_playlist_ids
+	if ids != "pl123,pl456,pl789" {
+		t.Errorf("expected source_playlist_ids='pl123,pl456,pl789', got %q", ids)
+	}
+	j, err := s.GetJob("job1")
+	if err != nil {
+		t.Fatalf("GetJob failed: %v", err)
+	}
+	if j.SourcePlaylistID != "pl123" {
+		t.Errorf("expected SourcePlaylistID 'pl123', got %q", j.SourcePlaylistID)
+	}
+}
+
+func TestCreateJobWithSingleSource(t *testing.T) {
+	s := newTestStore(t)
+	err := s.CreateJob("job1", "pl123", "", "Single")
+	if err != nil {
+		t.Fatalf("CreateJob failed: %v", err)
+	}
+	var ids string
+	err = s.db.QueryRow("SELECT COALESCE(source_playlist_ids,'') FROM jobs WHERE id = ?", "job1").Scan(&ids)
+	if err != nil {
+		t.Fatalf("query: %v", err)
+	}
+	// Single source stores just the primary ID
+	if ids != "pl123" {
+		t.Errorf("expected source_playlist_ids='pl123', got %q", ids)
+	}
+}
+
+func TestSetJobUndone(t *testing.T) {
+	s := newTestStore(t)
+	s.CreateJob("job1", "pl1", "", "test")
+	s.SetJobDone("job1")
+	if err := s.SetJobUndone("job1"); err != nil {
+		t.Fatalf("SetJobUndone failed: %v", err)
+	}
+	j, _ := s.GetJob("job1")
+	if j.Status != "undone" {
+		t.Errorf("expected status 'undone', got '%s'", j.Status)
+	}
+}
+
+func TestSetJobUndone_AnyStatus(t *testing.T) {
+	s := newTestStore(t)
+	s.CreateJob("job1", "pl1", "", "test")
+	// SetJobUndone unconditionally sets status to 'undone'
+	if err := s.SetJobUndone("job1"); err != nil {
+		t.Fatalf("SetJobUndone failed: %v", err)
+	}
+	j, _ := s.GetJob("job1")
+	if j.Status != "undone" {
+		t.Errorf("expected status 'undone', got '%s'", j.Status)
+	}
+}
+
+func TestGetJob_AllFields(t *testing.T) {
+	s := newTestStore(t)
+	s.CreateJob("job1", "pl1", "MySrc", "MyDest")
+	s.UpdateJobProgress("job1", 5, "new-pl-42")
+	s.UpdateJobStatus("job1", "inserting")
+	s.SetJobError("job1", "something broke")
+
+	// Create a fresh job to get the error state
+	s.CreateJob("job2", "pl2", "Src2", "Dest2")
+	s.SetJobDone("job2")
+
+	j, err := s.GetJob("job2")
+	if err != nil {
+		t.Fatalf("GetJob failed: %v", err)
+	}
+	if j.ID != "job2" {
+		t.Errorf("expected ID 'job2', got %q", j.ID)
+	}
+	if j.SourcePlaylistID != "pl2" {
+		t.Errorf("expected SourcePlaylistID 'pl2', got %q", j.SourcePlaylistID)
+	}
+	if j.SourceTitle != "Src2" {
+		t.Errorf("expected SourceTitle 'Src2', got %q", j.SourceTitle)
+	}
+	if j.NewName != "Dest2" {
+		t.Errorf("expected NewName 'Dest2', got %q", j.NewName)
+	}
+	if j.Status != "done" {
+		t.Errorf("expected Status 'done', got %q", j.Status)
+	}
+	if j.CreatedAt == "" {
+		t.Error("expected non-empty CreatedAt")
+	}
+}
+
+func TestSetJobUndone_RoundTrip(t *testing.T) {
+	s := newTestStore(t)
+	s.CreateJob("job1", "pl1", "", "test")
+	s.SetJobDone("job1")
+	s.SetJobUndone("job1")
+	j, _ := s.GetJob("job1")
+	if j.Status != "undone" {
+		t.Errorf("expected status 'undone', got '%s'", j.Status)
+	}
+	// Verify it's no longer in pending results
+	pending, _ := s.GetPendingJobs()
+	for _, pj := range pending {
+		if pj.ID == "job1" {
+			t.Error("expected undone job to not appear in GetPendingJobs")
+		}
+	}
+}
