@@ -1,3 +1,29 @@
+# [1.12.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.11.0...v1.12.0) (2026-06-13)
+
+
+### Bug Fixes
+
+* add continue-on-error to otel-cicd-action step ([3daa6f0](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/3daa6f0fd984fab07d6fab6610e72b3396e36367))
+* correct otel-cicd-action YAML indentation ([0b27ce4](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/0b27ce4aad10fceda6734d83aaee4c251b48ad52))
+* **deps:** update all non-major dependencies ([#33](https://github.com/martynvdijke/youtube-playlist-randomizer/issues/33)) ([9d9af5b](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/9d9af5bb9a3c2089943e64c3fb2f146feb9f5199))
+* **deps:** update all non-major dependencies to v0.284.0 ([0ebac85](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/0ebac85fa651866c5f548316c3fb538a6e39ac57))
+* rename githubToken to otelToken for otel-cicd-action@v4 ([054688d](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/054688d4ab059a2cd8a8014b2ea8474beb3b7682))
+* resolve release workflow startup_failure by removing duplicate ci.yaml ([452044b](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/452044b47abfaf7b37be0e8ce8d91dbc0defa354))
+* show auth prompt when no token, fix playlistItems.insert 400 errors ([02dcc0a](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/02dcc0a6eed856800205482846823303b9b7e78f))
+* **ui:** make job queue table and playlist cards responsive on mobile ([79f45f5](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/79f45f589bbcd9b7e9b8931704bca26989c20722))
+* use githubToken instead of otelToken for otel-cicd-action@v4 ([a368eef](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/a368eefba68eeddd78b09d913abbd95b2bd643fa))
+
+
+### Features
+
+* add Gotify push notifications for playlist shuffle events ([ae832cd](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/ae832cdeb37713f7399ef4f216a87486282823d4))
+* add otlpAuthorization input for Bearer auth ([c46bbaf](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/c46bbaf4fc61340ea7620056b7a327858ff9a1e2))
+* add playlist caching, PWA manifest, CDN SRI ([c6cc2e6](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/c6cc2e605ce6f2ca1e3c750aeb0d8c22fd9e354f))
+* multiple playlist support, preview, and undo features ([7b9803f](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/7b9803f30d877462320963ef8f0250db514a9132)), closes [#22](https://github.com/martynvdijke/youtube-playlist-randomizer/issues/22) [#23](https://github.com/martynvdijke/youtube-playlist-randomizer/issues/23) [#25](https://github.com/martynvdijke/youtube-playlist-randomizer/issues/25)
+* **ui:** add Resume Now button to job queue rows ([611a276](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/611a276cff990f4a289cf66a28aed68ebd5908c0))
+* **ux:** loading spinners, skeleton loaders, keyboard shortcuts, expanded layout ([853b744](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/853b744d6fb5188e02b43bfe0efc2ffb4f1e5144))
+* **ux:** smarter polling with visibility API, reduce poll to 60s, prefers-reduced-motion ([1ec6f4d](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/1ec6f4d7c1721871a2aded80ad2b4a48717550cb))
+
 # [1.11.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.10.0...v1.11.0) (2026-06-06)
 
 
