@@ -1,3 +1,10 @@
+# [1.13.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.12.0...v1.13.0) (2026-06-13)
+
+
+### Features
+
+* **security:** add CSRF protection with HMAC time-bounded tokens ([739b1b8](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/739b1b8053115f2e7ad67703043b7689f71a33a4))
+
 # [1.12.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.11.0...v1.12.0) (2026-06-13)
 
 
