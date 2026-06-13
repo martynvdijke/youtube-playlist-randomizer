@@ -55,7 +55,7 @@ header h1 {
 }
 
 main {
-  max-width: 800px;
+  max-width: 960px;
   margin: 0 auto;
   padding: 24px 16px;
 }
@@ -501,23 +501,238 @@ a.btn-primary:hover {
   margin-bottom: 16px;
 }
 
+/* Loading Spinner */
+.spinner {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 3px solid #333;
+  border-top-color: #ff4444;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  vertical-align: middle;
+}
+
+.spinner-lg {
+  width: 32px;
+  height: 32px;
+  border-width: 4px;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Skeleton Loaders */
+@keyframes shimmer {
+  0% { background-position: -200px 0; }
+  100% { background-position: calc(200px + 100%) 0; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #1a1a1a 25%, #2a2a2a 50%, #1a1a1a 75%);
+  background-size: 200px 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: 4px;
+}
+
+.skeleton-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.skeleton-card-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.skeleton-checkbox {
+  width: 18px;
+  height: 18px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.skeleton-text-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.skeleton-line {
+  height: 14px;
+  width: 60%;
+}
+
+.skeleton-line-sm {
+  height: 11px;
+  width: 35%;
+}
+
+.skeleton-btn {
+  width: 80px;
+  height: 28px;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+/* Fade-in for HTMX content swaps */
+.fade-in {
+  animation: fadeIn 0.25s ease-in;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Stagger fade-in for playlist cards */
+.playlist-card {
+  animation: fadeIn 0.25s ease-in;
+}
+
+.playlist-card:nth-child(1) { animation-delay: 0.02s; }
+.playlist-card:nth-child(2) { animation-delay: 0.04s; }
+.playlist-card:nth-child(3) { animation-delay: 0.06s; }
+.playlist-card:nth-child(4) { animation-delay: 0.08s; }
+.playlist-card:nth-child(5) { animation-delay: 0.10s; }
+.playlist-card:nth-child(6) { animation-delay: 0.12s; }
+.playlist-card:nth-child(7) { animation-delay: 0.14s; }
+.playlist-card:nth-child(8) { animation-delay: 0.16s; }
+.playlist-card:nth-child(9) { animation-delay: 0.18s; }
+.playlist-card:nth-child(10) { animation-delay: 0.20s; }
+.playlist-card:nth-child(11) { animation-delay: 0.22s; }
+.playlist-card:nth-child(12) { animation-delay: 0.24s; }
+.playlist-card:nth-child(13) { animation-delay: 0.26s; }
+.playlist-card:nth-child(14) { animation-delay: 0.28s; }
+.playlist-card:nth-child(15) { animation-delay: 0.30s; }
+
+/* Keyboard shortcut hints */
+kbd {
+  display: inline-block;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-family: inherit;
+  color: #888;
+  background: #2a2a2a;
+  border: 1px solid #3a3a3a;
+  border-radius: 4px;
+  line-height: 1.4;
+}
+
+.keyboard-hint {
+  font-size: 11px;
+  color: #666;
+  margin-left: 8px;
+}
+
 /* htmx loading states */
 .htmx-request {
   opacity: 0.7;
-  transition: opacity 0.3s;
+  transition: opacity 0.2s;
 }
 
 .htmx-indicator {
   opacity: 0;
-  transition: opacity 0.3s;
+  transition: opacity 0.2s;
 }
 
-.htmx-request .htmx-indicator {
-  opacity: 1;
-}
-
+.htmx-request .htmx-indicator,
 .htmx-request.htmx-indicator {
   opacity: 1;
+}
+
+/* Loading container */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 0;
+  gap: 16px;
+  color: #888;
+  font-size: 14px;
+}
+
+/* Skeleton container hidden by default, shown by htmx-request */
+.skeleton-container {
+  display: none;
+}
+
+.htmx-request.skeleton-container,
+.skeleton-container.htmx-request {
+  display: block;
+}
+
+#playlist-skeleton.htmx-indicator {
+  display: none;
+}
+
+#playlist-skeleton.htmx-request.htmx-indicator {
+  display: block;
+}
+
+/* Loading state for content swaps */
+.htmx-settling {
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+
+/* Button micro-interactions */
+.btn {
+  transform: translateY(0);
+  transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s;
+}
+
+.btn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(255,68,68,0.15);
+}
+
+.btn:active {
+  transform: translateY(0);
+  transition-duration: 0.05s;
+}
+
+.btn-secondary:hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+.btn-warning:hover {
+  box-shadow: 0 2px 8px rgba(255,152,0,0.2);
+}
+
+/* Toast animation */
+.toast {
+  animation: toastIn 0.3s ease-out;
+}
+
+@keyframes toastIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* Search bar with keyboard hint */
+.search-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-wrapper .search-hint {
+  position: absolute;
+  right: 10px;
+  pointer-events: none;
 }
 
 .progress-done {

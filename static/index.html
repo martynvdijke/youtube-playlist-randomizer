@@ -31,20 +31,35 @@
 </header>
 
 <main>
-  <div id="loading" hx-get="/api/playlists/html" hx-trigger="load delay:100ms" hx-target="#playlist-list" hx-swap="innerHTML" hx-on::before-request="document.getElementById('loading').classList.remove('hidden')" hx-on::after-request="document.getElementById('loading').classList.add('hidden')">
-    Loading playlists...
+  <div id="loading" class="loading-container htmx-indicator" hx-get="/api/playlists/html" hx-trigger="load delay:100ms" hx-target="#playlist-list" hx-swap="innerHTML" hx-on::before-request="document.getElementById('loading').classList.remove('hidden')" hx-on::after-request="document.getElementById('loading').classList.add('hidden')">
+    <div class="spinner spinner-lg"></div>
+    <span>Loading playlists...</span>
   </div>
+
+  <!-- Skeleton loader shown during playlist requests -->
+  <div id="playlist-skeleton" class="skeleton-container htmx-indicator">
+    <div class="skeleton-card"><div class="skeleton-card-left"><div class="skeleton-checkbox skeleton"></div><div class="skeleton-text-group"><div class="skeleton-line skeleton" style="width:50%"></div><div class="skeleton-line-sm skeleton" style="width:30%"></div></div></div><div class="skeleton-btn skeleton" style="width:60px"></div></div>
+    <div class="skeleton-card"><div class="skeleton-card-left"><div class="skeleton-checkbox skeleton"></div><div class="skeleton-text-group"><div class="skeleton-line skeleton" style="width:65%"></div><div class="skeleton-line-sm skeleton" style="width:25%"></div></div></div><div class="skeleton-btn skeleton" style="width:60px"></div></div>
+    <div class="skeleton-card"><div class="skeleton-card-left"><div class="skeleton-checkbox skeleton"></div><div class="skeleton-text-group"><div class="skeleton-line skeleton" style="width:40%"></div><div class="skeleton-line-sm skeleton" style="width:35%"></div></div></div><div class="skeleton-btn skeleton" style="width:60px"></div></div>
+    <div class="skeleton-card"><div class="skeleton-card-left"><div class="skeleton-checkbox skeleton"></div><div class="skeleton-text-group"><div class="skeleton-line skeleton" style="width:55%"></div><div class="skeleton-line-sm skeleton" style="width:20%"></div></div></div><div class="skeleton-btn skeleton" style="width:60px"></div></div>
+  </div>
+
   <div id="error" class="error hidden"></div>
 
-  <div id="job-queue" hx-get="/api/jobs/queue/html" hx-trigger="load, every 30s" hx-swap="innerHTML"></div>
+  <div id="job-queue" hx-get="/api/jobs/queue/html" hx-trigger="load, every 30s" hx-swap="innerHTML" hx-indicator=".spinner-jobq"></div>
+  <div class="spinner spinner-lg spinner-jobq htmx-indicator" style="margin:16px auto;display:block"></div>
 
   <div id="playlists">
     <div class="toolbar">
-      <input type="text" id="search" name="q" placeholder="Filter playlists..." autocomplete="off"
-             hx-get="/api/playlists/html" hx-trigger="keyup changed delay:300ms"
-             hx-target="#playlist-list" hx-swap="innerHTML">
+      <div class="search-wrapper">
+        <input type="text" id="search" name="q" placeholder='Filter playlists...  [press "/" to focus]' autocomplete="off"
+               hx-get="/api/playlists/html" hx-trigger="keyup changed delay:300ms"
+               hx-target="#playlist-list" hx-swap="innerHTML"
+               hx-indicator="#playlist-skeleton">
+        <span class="search-hint"><kbd>/</kbd></span>
+      </div>
     </div>
-    <div id="playlist-list"></div>
+    <div id="playlist-list" class="fade-in"></div>
   </div>
 
   <div id="no-playlists" class="hidden">
@@ -98,6 +113,49 @@ function showAdmin() {
   document.getElementById('nav-main').classList.remove('active');
   document.getElementById('nav-admin').classList.add('active');
 }
+
+// --- Keyboard shortcuts ---
+document.addEventListener('keydown', function(e) {
+  // Don't trigger shortcuts when typing in inputs
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+    if (e.key === 'Escape') {
+      closeModal();
+      closeProgressModal();
+      closePreviewModal();
+    }
+    return;
+  }
+
+  switch (e.key) {
+    case '/':
+      e.preventDefault();
+      const search = document.getElementById('search');
+      if (search) search.focus();
+      break;
+    case 'Escape':
+      closeModal();
+      closeProgressModal();
+      closePreviewModal();
+      break;
+    case 'r':
+    case 'R':
+      const btn = document.getElementById('randomize-selected');
+      if (btn && !btn.classList.contains('hidden')) {
+        randomizeSelected();
+      }
+      break;
+  }
+});
+
+// Close modals on backdrop click
+document.addEventListener('click', function(e) {
+  if (e.target.id === 'modal' || e.target.id === 'progress-modal' || e.target.id === 'preview-modal') {
+    const id = e.target.id;
+    if (id === 'modal') closeModal();
+    if (id === 'progress-modal') closeProgressModal();
+    if (id === 'preview-modal') closePreviewModal();
+  }
+});
 
 function updateSelected() {
   const checkboxes = document.querySelectorAll('.pl-checkbox:checked');

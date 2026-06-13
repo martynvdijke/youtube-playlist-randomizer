@@ -18,10 +18,10 @@
 {{end}}
 
 {{define "jobProgressDone"}}
-<div id="progress-result" class="modal-content" hx-get="/api/quota/html" hx-trigger="load" hx-target="#quota-bar" hx-swap="innerHTML">
-  <h2>Randomizing...</h2>
+<div id="progress-result" class="modal-content fade-in" hx-get="/api/quota/html" hx-trigger="load" hx-target="#quota-bar" hx-swap="innerHTML">
+  <h2>✓ Randomization Complete</h2>
   <div class="progress-bar"><div class="progress-fill progress-done" style="width:100%"></div></div>
-  <p>Playlist created successfully!</p>
+  <p style="color:#4caf50;font-weight:500">Playlist created successfully!</p>
   <div id="progress-result" style="text-align:center">
     {{if .NewPlaylistURL}}<a id="playlist-link" href="{{.NewPlaylistURL}}" target="_blank">Open in YouTube</a>{{end}}
     <button class="btn btn-primary" onclick="closeProgressModal()">Done</button>
@@ -79,7 +79,7 @@
 {{define "noJobs"}}<div id="job-queue" class="job-queue hidden"></div>{{end}}
 
 {{define "jobQueue"}}
-<div id="job-queue" class="job-queue">
+<div id="job-queue" class="job-queue fade-in">
   <h3>Job Queue</h3>
   <div class="job-table-wrapper">
     <table class="job-table">

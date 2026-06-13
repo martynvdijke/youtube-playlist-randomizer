@@ -21,7 +21,7 @@
 {{define "emptyPlaylists"}}<p>No playlists found.</p>{{end}}
 
 {{define "playlistCards"}}
-<div class="toolbar-actions">
+<div class="toolbar-actions fade-in">
   <button id="randomize-selected" class="btn btn-primary hidden" onclick="randomizeSelected()">Randomize Selected (<span id="selected-count">0</span>)</button>
 </div>
 {{range $i, $pl := .}}
