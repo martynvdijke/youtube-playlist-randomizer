@@ -46,7 +46,7 @@
 
   <div id="error" class="error hidden"></div>
 
-  <div id="job-queue" hx-get="/api/jobs/queue/html" hx-trigger="load, every 30s" hx-swap="innerHTML" hx-indicator=".spinner-jobq"></div>
+  <div id="job-queue" hx-get="/api/jobs/queue/html" hx-trigger="load, every 60s" hx-swap="innerHTML" hx-indicator=".spinner-jobq"></div>
   <div class="spinner spinner-lg spinner-jobq htmx-indicator" style="margin:16px auto;display:block"></div>
 
   <div id="playlists">
@@ -113,6 +113,31 @@ function showAdmin() {
   document.getElementById('nav-main').classList.remove('active');
   document.getElementById('nav-admin').classList.add('active');
 }
+
+// --- Smarter polling: pause HTMX polling when tab is hidden ---
+(function() {
+  let wasPolling = true;
+  document.addEventListener('visibilitychange', function() {
+    if (document.hidden) {
+      // Pause HTMX polling by temporarily disabling all poll triggers
+      document.querySelectorAll('[hx-trigger*="every"]').forEach(function(el) {
+        el.setAttribute('data-poll-saved', el.getAttribute('hx-trigger'));
+        el.setAttribute('hx-trigger', 'none');
+      });
+      wasPolling = true;
+    } else if (wasPolling) {
+      // Restore polling on return
+      document.querySelectorAll('[data-poll-saved]').forEach(function(el) {
+        el.setAttribute('hx-trigger', el.getAttribute('data-poll-saved'));
+        el.removeAttribute('data-poll-saved');
+      });
+      // Trigger immediate refresh
+      document.querySelectorAll('[hx-get="/api/jobs/queue/html"],[hx-get="/api/quota/html"]').forEach(function(el) {
+        htmx.trigger(el, 'load');
+      });
+    }
+  });
+})();
 
 // --- Keyboard shortcuts ---
 document.addEventListener('keydown', function(e) {

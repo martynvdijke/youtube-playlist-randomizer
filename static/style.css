@@ -735,6 +735,32 @@ kbd {
   pointer-events: none;
 }
 
+/* Respect reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation-duration: 2s;
+  }
+  .skeleton {
+    animation: none;
+    background: #2a2a2a;
+  }
+  .fade-in {
+    animation: none;
+  }
+  .playlist-card {
+    animation: none;
+  }
+  .toast {
+    animation: none;
+  }
+  .btn {
+    transition: none;
+  }
+  .progress-fill {
+    transition: none;
+  }
+}
+
 .progress-done {
   background: linear-gradient(90deg, #4caf50, #66bb6a) !important;
 }
