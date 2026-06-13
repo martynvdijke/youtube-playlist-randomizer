@@ -218,7 +218,8 @@ func main() {
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
-	var handler http.Handler = h.CORSMiddleware(mux)
+	var handler http.Handler = h.CSRFMiddleware(mux)
+	handler = h.CORSMiddleware(handler)
 	if otel != nil {
 		handler = otel.Middleware(handler)
 	}

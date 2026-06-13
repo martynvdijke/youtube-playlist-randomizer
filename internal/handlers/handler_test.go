@@ -583,3 +583,161 @@ func TestHandleUndo_MissingJobID(t *testing.T) {
 		t.Errorf("expected 400, got %d", rr.Code)
 	}
 }
+
+// --- CSRF tests ---
+
+func TestCSRFToken_NonEmpty(t *testing.T) {
+	h := &Handlers{csrfKey: make([]byte, 32)}
+	for i := range h.csrfKey {
+		h.csrfKey[i] = byte(i)
+	}
+	tok := h.csrfToken()
+	if tok == "" {
+		t.Fatal("expected non-empty CSRF token")
+	}
+	if len(tok) < 10 {
+		t.Errorf("expected token length >= 10, got %d", len(tok))
+	}
+}
+
+func TestCSRFValidate_ValidToken(t *testing.T) {
+	h := &Handlers{csrfKey: make([]byte, 32)}
+	for i := range h.csrfKey {
+		h.csrfKey[i] = byte(i)
+	}
+	tok := h.csrfToken()
+	req := httptest.NewRequest("POST", "/api/randomize", nil)
+	req.Header.Set("X-CSRF-Token", tok)
+	req.AddCookie(&http.Cookie{Name: "csrf_token", Value: tok})
+	if !h.validateCSRF(req) {
+		t.Error("expected valid CSRF token to pass validation")
+	}
+}
+
+func TestCSRFValidate_NoCookie(t *testing.T) {
+	h := &Handlers{csrfKey: make([]byte, 32)}
+	req := httptest.NewRequest("POST", "/api/randomize", nil)
+	req.Header.Set("X-CSRF-Token", "anything")
+	if h.validateCSRF(req) {
+		t.Error("expected validation to fail without cookie")
+	}
+}
+
+func TestCSRFValidate_Mismatch(t *testing.T) {
+	h := &Handlers{csrfKey: make([]byte, 32)}
+	req := httptest.NewRequest("POST", "/api/randomize", nil)
+	req.Header.Set("X-CSRF-Token", "token-a")
+	req.AddCookie(&http.Cookie{Name: "csrf_token", Value: "token-b"})
+	if h.validateCSRF(req) {
+		t.Error("expected validation to fail with mismatched tokens")
+	}
+}
+
+func TestCSRFValidate_SkipsGET(t *testing.T) {
+	h := &Handlers{}
+	req := httptest.NewRequest("GET", "/api/playlists", nil)
+	if !h.validateCSRF(req) {
+		t.Error("expected GET to skip CSRF validation")
+	}
+}
+
+func TestCSRFValidate_SkipsCallback(t *testing.T) {
+	h := &Handlers{}
+	req := httptest.NewRequest("POST", "/callback?code=abc", nil)
+	if !h.validateCSRF(req) {
+		t.Error("expected OAuth callback to skip CSRF validation")
+	}
+}
+
+func TestCSRFMiddleware_SetsCookieOnGET(t *testing.T) {
+	h := New(&Config{
+		Store:   &store.Store{},
+		Logger:  nil,
+		Version: "test",
+	})
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/", nil)
+	handler := h.CSRFMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	handler.ServeHTTP(rr, req)
+	resp := rr.Result()
+	var found bool
+	for _, c := range resp.Cookies() {
+		if c.Name == "csrf_token" && c.Value != "" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected csrf_token cookie to be set")
+	}
+}
+
+func TestCSRFMiddleware_RejectsPOSTWithoutToken(t *testing.T) {
+	h := New(&Config{
+		Store:   &store.Store{},
+		Logger:  nil,
+		Version: "test",
+	})
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/randomize", nil)
+	handler := h.CSRFMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Error("handler should not be called")
+	}))
+	handler.ServeHTTP(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("expected 403, got %d", rr.Code)
+	}
+}
+
+func TestCSRFMiddleware_AcceptsPOSTWithValidToken(t *testing.T) {
+	h := New(&Config{
+		Store:   &store.Store{},
+		Logger:  nil,
+		Version: "test",
+	})
+	// First GET to get CSRF cookie
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/", nil)
+	handler := h.CSRFMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	handler.ServeHTTP(rr, req)
+	resp := rr.Result()
+	var csrfCookie string
+	for _, c := range resp.Cookies() {
+		if c.Name == "csrf_token" {
+			csrfCookie = c.Value
+			break
+		}
+	}
+	if csrfCookie == "" {
+		t.Fatal("no CSRF cookie in response")
+	}
+
+	// Now POST with the token
+	rr2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest("POST", "/api/randomize", nil)
+	req2.Header.Set("X-CSRF-Token", csrfCookie)
+	req2.AddCookie(&http.Cookie{Name: "csrf_token", Value: csrfCookie})
+	handler.ServeHTTP(rr2, req2)
+	if rr2.Code == http.StatusForbidden {
+		t.Errorf("expected POST with valid token to succeed, got 403: %s", rr2.Body.String())
+	}
+}
+
+func TestCSRFValidate_FormField(t *testing.T) {
+	h := &Handlers{csrfKey: make([]byte, 32)}
+	for i := range h.csrfKey {
+		h.csrfKey[i] = byte(i)
+	}
+	tok := h.csrfToken()
+	body := "csrf_token=" + tok
+	req := httptest.NewRequest("POST", "/api/randomize", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: "csrf_token", Value: tok})
+	if !h.validateCSRF(req) {
+		t.Error("expected form field CSRF token to pass validation")
+	}
+}

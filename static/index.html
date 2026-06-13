@@ -9,7 +9,17 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <script src="https://unpkg.com/htmx.org@2.0.4" integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+" crossorigin="anonymous"></script>
+<!-- csrf -->
 <!-- umami -->
+<script>
+// HTMX config: include CSRF token on all state-changing requests
+document.addEventListener('htmx:configRequest', function(e) {
+  var m = document.querySelector('meta[name="csrf-token"]');
+  if (m) {
+    e.detail.headers['X-CSRF-Token'] = m.getAttribute('content');
+  }
+});
+</script>
 <script defer src="/static/js/app.js"></script>
 </head>
 <body>

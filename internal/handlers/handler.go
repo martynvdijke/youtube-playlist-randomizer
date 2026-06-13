@@ -3,13 +3,18 @@
 package handlers
 
 import (
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"html/template"
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/admin"
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/gotify"
@@ -56,10 +61,13 @@ type Handlers struct {
 	clientSecretPath string
 	dataDir       string
 	version       string
+	csrfKey       []byte
 }
 
 // New creates a new Handlers from the given config.
 func New(cfg *Config) *Handlers {
+	csrfKey := make([]byte, 32)
+	rand.Read(csrfKey)
 	return &Handlers{
 		store:         cfg.Store,
 		logger:        cfg.Logger,
@@ -72,6 +80,7 @@ func New(cfg *Config) *Handlers {
 		clientSecretPath: cfg.ClientSecretPath,
 		dataDir:       cfg.DataDir,
 		version:       cfg.Version,
+		csrfKey:       csrfKey,
 	}
 }
 
@@ -244,15 +253,72 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, ErrorResponse{Error: msg})
 }
 
+// csrfToken generates a time-bounded CSRF token signed with the server key.
+func (h *Handlers) csrfToken() string {
+	mac := hmac.New(sha256.New, h.csrfKey)
+	// Token is valid for the current 1-hour window
+	hour := time.Now().Truncate(time.Hour).Unix()
+	fmt.Fprintf(mac, "%d", hour)
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// validateCSRF checks the X-CSRF-Token header or csrf_token form field against
+// the csrf_token cookie. Skips validation for paths in skipCSRF.
+func (h *Handlers) validateCSRF(r *http.Request) bool {
+	if r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodOptions {
+		return true
+	}
+	// Skip CSRF for OAuth callback (external redirect)
+	if strings.HasPrefix(r.URL.Path, "/callback") {
+		return true
+	}
+	requestToken := r.Header.Get("X-CSRF-Token")
+	if requestToken == "" {
+		requestToken = r.FormValue("csrf_token")
+	}
+	cookie, err := r.Cookie("csrf_token")
+	if err != nil {
+		return false
+	}
+	return hmac.Equal([]byte(cookie.Value), []byte(requestToken))
+}
+
+// CORSMiddleware adds permissive CORS headers for local development.
 func (h *Handlers) CORSMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-CSRF-Token")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// CSRFMiddleware sets CSRF cookies and validates CSRF tokens on state-changing
+// requests.
+func (h *Handlers) CSRFMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Set CSRF cookie on every response (non-HttpOnly so JS can read it)
+		token := h.csrfToken()
+		http.SetCookie(w, &http.Cookie{
+			Name:     "csrf_token",
+			Value:    token,
+			Path:     "/",
+			SameSite: http.SameSiteLaxMode,
+			HttpOnly: false,
+			Secure:   false,
+		})
+
+		if !h.validateCSRF(r) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusForbidden)
+			json.NewEncoder(w).Encode(ErrorResponse{Error: "CSRF validation failed"})
+			return
+		}
+
 		next.ServeHTTP(w, r)
 	})
 }
@@ -269,6 +335,10 @@ func (h *Handlers) handleRoot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	content := strings.Replace(string(pageHTML), `id="version-badge"></span>`, fmt.Sprintf(`id="version-badge">v%s</span>`, h.version), 1)
+
+	// Inject CSRF token meta tag
+	content = strings.Replace(content, "<!-- csrf -->",
+		fmt.Sprintf(`<meta name="csrf-token" content="%s">`, h.csrfToken()), 1)
 
 	umamiURL, _ := h.store.GetSetting("umami_url")
 	umamiWebsiteID, _ := h.store.GetSetting("umami_website_id")

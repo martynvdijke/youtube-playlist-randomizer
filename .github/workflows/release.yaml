@@ -138,4 +138,4 @@ jobs:
         with:
           otlpEndpoint: ${{ secrets.OTLP_ENDPOINT }}
           otlpHeaders: ${{ secrets.OTLP_HEADERS }}
-          otelToken: ${{ secrets.OTEL_TOKEN }}
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
