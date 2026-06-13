@@ -21,7 +21,7 @@ func TestPlaylistInitialization(t *testing.T) {
 
 func TestPlaylistAddItem(t *testing.T) {
 	pl := NewPlaylist("PL123", "My Playlist")
-	item := NewPlayListItem("item1", "Video 1", "2024-01-15T10:00:00Z", "UC123", "Desc", "vid1")
+	item := NewPlayListItem("item1", "Video 1", "2024-01-15T10:00:00Z", "UC123", "", "Desc", "vid1", "")
 
 	pl.AddItem(item)
 
@@ -37,9 +37,9 @@ func TestPlaylistAddMultipleItems(t *testing.T) {
 	pl := NewPlaylist("PL123", "My Playlist")
 
 	items := []PlayListItem{
-		NewPlayListItem("item1", "Video 1", "", "", "", "vid1"),
-		NewPlayListItem("item2", "Video 2", "", "", "", "vid2"),
-		NewPlayListItem("item3", "Video 3", "", "", "", "vid3"),
+		NewPlayListItem("item1", "Video 1", "", "", "", "", "vid1", ""),
+		NewPlayListItem("item2", "Video 2", "", "", "", "", "vid2", ""),
+		NewPlayListItem("item3", "Video 3", "", "", "", "", "vid3", ""),
 	}
 
 	for _, item := range items {

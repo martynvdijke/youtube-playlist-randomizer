@@ -80,18 +80,19 @@ type QuotaInfo struct {
 }
 
 type Job struct {
-	ID               string  `json:"id"`
-	SourcePlaylistID string  `json:"sourcePlaylistId"`
-	SourceTitle      string  `json:"sourceTitle"`
-	NewName          string  `json:"newName"`
-	NewPlaylistID    string  `json:"newPlaylistId,omitempty"`
-	Status           string  `json:"status"`
-	TotalItems       int     `json:"totalItems"`
-	InsertedItems    int     `json:"insertedItems"`
-	Error            string  `json:"error,omitempty"`
-	CreatedAt        string  `json:"createdAt"`
-	UpdatedAt        string  `json:"updatedAt"`
-	PausedAt         string  `json:"pausedAt,omitempty"`
+	ID                string   `json:"id"`
+	SourcePlaylistID  string   `json:"sourcePlaylistId"`
+	SourcePlaylistIDs []string `json:"sourcePlaylistIds,omitempty"`
+	SourceTitle       string   `json:"sourceTitle"`
+	NewName           string   `json:"newName"`
+	NewPlaylistID     string   `json:"newPlaylistId,omitempty"`
+	Status            string   `json:"status"`
+	TotalItems        int      `json:"totalItems"`
+	InsertedItems     int      `json:"insertedItems"`
+	Error             string   `json:"error,omitempty"`
+	CreatedAt         string   `json:"createdAt"`
+	UpdatedAt         string   `json:"updatedAt"`
+	PausedAt          string   `json:"pausedAt,omitempty"`
 }
 
 func Open(path string) (*Store, error) {
@@ -166,6 +167,7 @@ func (s *Store) migrate() error {
 	for _, alter := range []string{
 		"ALTER TABLE jobs ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE jobs ADD COLUMN paused_at TEXT DEFAULT ''",
+		"ALTER TABLE jobs ADD COLUMN source_playlist_ids TEXT DEFAULT ''",
 	} {
 		s.db.Exec(alter) //nolint:errcheck
 	}
@@ -220,11 +222,26 @@ func (s *Store) EstimateQuotaNeeded(itemCount int) int {
 	return QuotaCreatePlaylist + itemCount*QuotaInsertItem
 }
 
-func (s *Store) CreateJob(id, sourcePlaylistID, sourceTitle, newName string) error {
+func (s *Store) CreateJob(id, sourcePlaylistID, sourceTitle, newName string, extraPlaylistIDs ...string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
-	_, err := s.db.Exec(`INSERT INTO jobs (id, source_playlist_id, source_title, new_name, status, created_at, updated_at)
-		VALUES (?, ?, ?, ?, 'pending', ?, ?)`, id, sourcePlaylistID, sourceTitle, newName, now, now)
+	allIDs := sourcePlaylistID
+	if len(extraPlaylistIDs) > 0 {
+		allIDs = sourcePlaylistID + "," + joinIDs(extraPlaylistIDs)
+	}
+	_, err := s.db.Exec(`INSERT INTO jobs (id, source_playlist_id, source_title, new_name, source_playlist_ids, status, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, 'pending', ?, ?)`, id, sourcePlaylistID, sourceTitle, newName, allIDs, now, now)
 	return err
+}
+
+func joinIDs(ids []string) string {
+	var b []byte
+	for i, id := range ids {
+		if i > 0 {
+			b = append(b, ',')
+		}
+		b = append(b, id...)
+	}
+	return string(b)
 }
 
 func (s *Store) UpdateJobStatus(id, status string) error {
@@ -256,6 +273,20 @@ func (s *Store) SetJobPaused(id string) error {
 
 func (s *Store) SetJobDone(id string) error {
 	_, err := s.db.Exec("UPDATE jobs SET status = 'done', updated_at = ? WHERE id = ?", nowRFC3339(), id)
+	return err
+}
+
+func (s *Store) SetJobUndone(id string) error {
+	_, err := s.db.Exec("UPDATE jobs SET status = 'undone', updated_at = ? WHERE id = ?", nowRFC3339(), id)
+	return err
+}
+
+func (s *Store) DeleteJob(id string) error {
+	_, err := s.db.Exec("DELETE FROM job_items WHERE job_id = ?", id)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec("DELETE FROM jobs WHERE id = ?", id)
 	return err
 }
 
@@ -323,23 +354,54 @@ func (s *Store) ResumeJob(id, newPlaylistID string) ([]struct{ VideoID string; P
 	return items, nil
 }
 
-func (s *Store) GetJob(id string) (*Job, error) {
-	row := s.db.QueryRow(`SELECT id, source_playlist_id, source_title, new_name,
-		COALESCE(new_playlist_id,''), status, total_items, inserted_items,
-		COALESCE(error,''), created_at, COALESCE(updated_at,''), COALESCE(paused_at,'') FROM jobs WHERE id = ?`, id)
+func scanJob(scanner interface {
+	Scan(dest ...interface{}) error
+}) (*Job, error) {
 	j := &Job{}
-	if err := row.Scan(&j.ID, &j.SourcePlaylistID, &j.SourceTitle, &j.NewName,
+	var idsStr string
+	err := scanner.Scan(&j.ID, &j.SourcePlaylistID, &j.SourceTitle, &j.NewName,
 		&j.NewPlaylistID, &j.Status, &j.TotalItems, &j.InsertedItems,
-		&j.Error, &j.CreatedAt, &j.UpdatedAt, &j.PausedAt); err != nil {
+		&j.Error, &j.CreatedAt, &j.UpdatedAt, &j.PausedAt, &idsStr)
+	if err != nil {
 		return nil, err
 	}
+	j.SourcePlaylistIDs = parseIDs(idsStr, j.SourcePlaylistID)
 	return j, nil
 }
 
+func parseIDs(idsStr, fallback string) []string {
+	if idsStr == "" {
+		if fallback != "" {
+			return []string{fallback}
+		}
+		return nil
+	}
+	// Split by comma
+	var ids []string
+	start := 0
+	for i := 0; i <= len(idsStr); i++ {
+		if i == len(idsStr) || idsStr[i] == ',' {
+			if i > start {
+				ids = append(ids, idsStr[start:i])
+			}
+			start = i + 1
+		}
+	}
+	return ids
+}
+
+const jobColumns = `id, source_playlist_id, source_title, new_name,
+	COALESCE(new_playlist_id,''), status, total_items, inserted_items,
+	COALESCE(error,''), created_at, COALESCE(updated_at,''), COALESCE(paused_at,''),
+	COALESCE(source_playlist_ids,'')`
+
+func (s *Store) GetJob(id string) (*Job, error) {
+	row := s.db.QueryRow(`SELECT `+jobColumns+` FROM jobs WHERE id = ?`, id)
+	return scanJob(row)
+}
+
 func (s *Store) GetPendingJobs() ([]Job, error) {
-	rows, err := s.db.Query(`SELECT id, source_playlist_id, source_title, new_name,
-		COALESCE(new_playlist_id,''), status, total_items, inserted_items,
-		COALESCE(error,''), created_at, COALESCE(updated_at,''), COALESCE(paused_at,'') FROM jobs WHERE status IN ('pending','paused','fetching','shuffling','inserting')
+	rows, err := s.db.Query(`SELECT `+jobColumns+` FROM jobs WHERE status IN ('pending','paused','fetching','shuffling','inserting')
 		ORDER BY created_at`)
 	if err != nil {
 		return nil, err
@@ -348,30 +410,61 @@ func (s *Store) GetPendingJobs() ([]Job, error) {
 
 	var jobs []Job
 	for rows.Next() {
-		var j Job
-		if err := rows.Scan(&j.ID, &j.SourcePlaylistID, &j.SourceTitle, &j.NewName,
-			&j.NewPlaylistID, &j.Status, &j.TotalItems, &j.InsertedItems,
-			&j.Error, &j.CreatedAt, &j.UpdatedAt, &j.PausedAt); err != nil {
+		j, err := scanJob(rows)
+		if err != nil {
 			return nil, err
 		}
-		jobs = append(jobs, j)
+		jobs = append(jobs, *j)
 	}
 	return jobs, rows.Err()
 }
 
 func (s *Store) GetLatestJob() (*Job, error) {
-	row := s.db.QueryRow(`SELECT id, source_playlist_id, source_title, new_name,
-		COALESCE(new_playlist_id,''), status, total_items, inserted_items,
-		COALESCE(error,''), created_at, COALESCE(updated_at,''), COALESCE(paused_at,'') FROM jobs ORDER BY created_at DESC LIMIT 1`)
-	j := &Job{}
-	if err := row.Scan(&j.ID, &j.SourcePlaylistID, &j.SourceTitle, &j.NewName,
-		&j.NewPlaylistID, &j.Status, &j.TotalItems, &j.InsertedItems,
-		&j.Error, &j.CreatedAt, &j.UpdatedAt, &j.PausedAt); err == sql.ErrNoRows {
+	row := s.db.QueryRow(`SELECT `+jobColumns+` FROM jobs ORDER BY created_at DESC LIMIT 1`)
+	j, err := scanJob(row)
+	if err == sql.ErrNoRows {
 		return nil, nil
 	} else if err != nil {
 		return nil, err
 	}
 	return j, nil
+}
+
+func (s *Store) GetDoneJobs() ([]Job, error) {
+	rows, err := s.db.Query(`SELECT `+jobColumns+` FROM jobs WHERE status = 'done' ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var jobs []Job
+	for rows.Next() {
+		j, err := scanJob(rows)
+		if err != nil {
+			return nil, err
+		}
+		jobs = append(jobs, *j)
+	}
+	return jobs, rows.Err()
+}
+
+func (s *Store) GetAllJobs(limit int) ([]Job, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	rows, err := s.db.Query(`SELECT `+jobColumns+` FROM jobs ORDER BY created_at DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var jobs []Job
+	for rows.Next() {
+		j, err := scanJob(rows)
+		if err != nil {
+			return nil, err
+		}
+		jobs = append(jobs, *j)
+	}
+	return jobs, rows.Err()
 }
 
 func (s *Store) InsertLog(entry LogEntry) error {

@@ -144,7 +144,8 @@ func (h *Handlers) handleModalHTML(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tmpl.ExecuteTemplate(w, "modal", ModalData{
-		PlaylistID:     playlistID,
+		PlaylistIDs:    playlistID,
+		FirstID:        playlistID,
 		Title:          title,
 		DefaultName:    defaultName,
 		Cost:           cost,
@@ -152,4 +153,62 @@ func (h *Handlers) handleModalHTML(w http.ResponseWriter, r *http.Request) {
 		QuotaText:      quotaText(quota, cost),
 		WarningHTML:    warningHTML,
 	})
+}
+
+func (h *Handlers) handlePlaylistPreviewHTML(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	playlistID := r.URL.Query().Get("id")
+	if playlistID == "" {
+		http.Error(w, "Missing playlist ID", http.StatusBadRequest)
+		return
+	}
+
+	if h.ytClient == nil {
+		http.Error(w, "YouTube API not available", http.StatusBadRequest)
+		return
+	}
+
+	items, err := h.ytClient.GetPlaylistItems(r.Context(), playlistID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if _, err := h.store.AddQuota(store.QuotaListPlaylistItems); err != nil {
+		h.logger.Warnc(r.Context(), "failed to track quota", "error", err.Error())
+	}
+
+	// Take first 50 items for preview
+	maxItems := 50
+	if len(items) > maxItems {
+		items = items[:maxItems]
+	}
+
+	previewItems := make([]PreviewItemData, 0, len(items))
+	for _, item := range items {
+		previewItems = append(previewItems, PreviewItemData{
+			ThumbnailURL: item.ThumbnailURL,
+			Title:        item.Title,
+			VideoID:      item.VideoID,
+			ChannelTitle: item.ChannelTitle,
+		})
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	tmpl.ExecuteTemplate(w, "previewModal", previewModalData{
+		Title:       r.URL.Query().Get("title"),
+		TotalItems:  len(items), // total before truncation
+		ShowCount:   minInt(len(previewItems), maxItems),
+		Items:       previewItems,
+	})
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

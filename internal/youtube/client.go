@@ -256,6 +256,23 @@ func (c *Client) CreatePlaylist(ctx context.Context, title string) (string, erro
 	return response.Id, nil
 }
 
+func (c *Client) DeletePlaylist(ctx context.Context, playlistID string) error {
+	err := c.service.Playlists.Delete(playlistID).Context(ctx).Do()
+	if err != nil {
+		if c.logger != nil {
+			c.logger.Errorc(ctx, "YouTube API: failed to delete playlist", "playlistId", playlistID, "error", err.Error())
+		}
+		return fmt.Errorf("failed to delete playlist: %w", err)
+	}
+	if c.otel != nil {
+		c.otel.RecordYouTubeAPICall(ctx, "playlists.delete")
+	}
+	if c.logger != nil {
+		c.logger.Infoc(ctx, "YouTube API: playlist deleted", "playlistId", playlistID)
+	}
+	return nil
+}
+
 func (c *Client) InsertPlaylistItem(ctx context.Context, playlistID, videoID string, position int64) error {
 	item := &youtube.PlaylistItem{
 		Snippet: &youtube.PlaylistItemSnippet{
@@ -285,13 +302,29 @@ func (c *Client) InsertPlaylistItem(ctx context.Context, playlistID, videoID str
 
 func convertToPlayListItem(item *youtube.PlaylistItem) models.PlayListItem {
 	snippet := item.Snippet
+	thumbnailURL := ""
+	if snippet.Thumbnails != nil {
+		if snippet.Thumbnails.Default != nil {
+			thumbnailURL = snippet.Thumbnails.Default.Url
+		} else if snippet.Thumbnails.Medium != nil {
+			thumbnailURL = snippet.Thumbnails.Medium.Url
+		} else if snippet.Thumbnails.High != nil {
+			thumbnailURL = snippet.Thumbnails.High.Url
+		}
+	}
+	channelTitle := ""
+	if snippet.VideoOwnerChannelTitle != "" {
+		channelTitle = snippet.VideoOwnerChannelTitle
+	}
 	return models.NewPlayListItem(
 		item.Id,
 		snippet.Title,
 		snippet.PublishedAt,
 		snippet.ChannelId,
+		channelTitle,
 		snippet.Description,
 		snippet.ResourceId.VideoId,
+		thumbnailURL,
 	)
 }
 

@@ -73,7 +73,7 @@ func (h *Handlers) handleForceResume(w http.ResponseWriter, r *http.Request) {
 
 	switch j.Status {
 	case "pending":
-		jp := h.jobRunner.Run(ctx, j.ID, j.SourcePlaylistID, j.NewName)
+		jp := h.jobRunner.Run(ctx, j.ID, j.NewName, j.SourcePlaylistIDs...)
 		tmpl.ExecuteTemplate(w, "forceResumePending", ForceResumeData{JobID: jobID})
 		_ = jp
 
@@ -93,7 +93,7 @@ func (h *Handlers) handleJobQueueHTML(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jobs, err := h.store.GetPendingJobs()
+	jobs, err := h.store.GetAllJobs(50)
 	if err != nil {
 		http.Error(w, "Internal error", http.StatusInternalServerError)
 		return
@@ -124,16 +124,25 @@ func (h *Handlers) handleJobQueueHTML(w http.ResponseWriter, r *http.Request) {
 		created = strings.Replace(created, "T", " ", 1)
 
 		var actionHTML template.HTML
+		var undoHTML template.HTML
 		switch j.Status {
 		case "paused", "pending", "fetching", "shuffling", "inserting":
 			vals := template.HTML(fmt.Sprintf(`hx-vals='{"jobId":%q}'`, j.ID))
 			actionHTML = template.HTML(fmt.Sprintf(
 				`<button class="btn btn-warning btn-sm" hx-post="/api/jobs/resume" %s hx-target="closest tr" hx-swap="outerHTML" hx-confirm="Resume this job now?">Resume Now</button>`,
 				vals))
-		case "complete":
-			actionHTML = `<span class="status-complete">Done</span>`
+		case "done":
+			actionHTML = `<span class="status-done">Done</span>`
+			if j.NewPlaylistID != "" {
+				vals := template.HTML(fmt.Sprintf(`hx-vals='{"jobId":%q}'`, j.ID))
+				undoHTML = template.HTML(fmt.Sprintf(
+					`<button class="btn btn-danger btn-sm" hx-post="/api/jobs/undo" %s hx-confirm="Delete the created playlist and undo this randomization?" hx-target="#undo-result" hx-swap="innerHTML">Undo</button>`,
+					vals))
+			}
 		case "error":
 			actionHTML = `<span class="status-error">Error</span>`
+		case "undone":
+			actionHTML = `<span class="status-undone">Undone</span>`
 		}
 
 		rows = append(rows, JobQueueRowData{
@@ -144,10 +153,69 @@ func (h *Handlers) handleJobQueueHTML(w http.ResponseWriter, r *http.Request) {
 			Progress:    progress,
 			Created:     created,
 			ActionHTML:  actionHTML,
+			UndoHTML:    undoHTML,
 		})
 	}
 
 	tmpl.ExecuteTemplate(w, "jobQueue", rows)
+}
+
+func (h *Handlers) handleUndo(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	jobID := r.FormValue("jobId")
+	if jobID == "" {
+		jobID = r.URL.Query().Get("jobId")
+	}
+	if jobID == "" {
+		writeError(w, http.StatusBadRequest, "Missing job ID")
+		return
+	}
+
+	j, err := h.store.GetJob(jobID)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "Job not found")
+		return
+	}
+
+	if j.Status != "done" {
+		writeError(w, http.StatusBadRequest, "Only completed jobs can be undone")
+		return
+	}
+
+	if j.NewPlaylistID == "" {
+		writeError(w, http.StatusBadRequest, "No playlist to undo")
+		return
+	}
+
+	if h.ytClient == nil {
+		writeError(w, http.StatusBadRequest, "YouTube API not available")
+		return
+	}
+
+	// Delete the created playlist from YouTube
+	if err := h.ytClient.DeletePlaylist(r.Context(), j.NewPlaylistID); err != nil {
+		h.logger.Errorc(r.Context(), "failed to delete playlist for undo", "jobId", jobID, "playlistId", j.NewPlaylistID, "error", err.Error())
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to delete playlist: %v", err))
+		return
+	}
+
+	if err := h.store.SetJobUndone(jobID); err != nil {
+		h.logger.Errorc(r.Context(), "failed to mark job as undone", "jobId", jobID, "error", err.Error())
+		writeError(w, http.StatusInternalServerError, "Failed to update job status")
+		return
+	}
+
+	h.logger.Infoc(r.Context(), "Job undone", "jobId", jobID, "playlistId", j.NewPlaylistID)
+
+	// Redirect back to the job queue HTML
+	w.Header().Set("Content-Type", "text/html")
+	w.Header().Set("HX-Refresh", "true")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprint(w, "<div class='undo-success'>Playlist deleted. <button class='btn' hx-get='/api/jobs/queue/html' hx-target='#job-queue' hx-swap='innerHTML'>Refresh</button></div>")
 }
 
 // writeJobProgressHTML renders the job progress modal content based on status.

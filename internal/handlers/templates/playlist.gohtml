@@ -20,12 +20,48 @@
 
 {{define "emptyPlaylists"}}<p>No playlists found.</p>{{end}}
 
-{{define "playlistCards"}}{{range .}}
+{{define "playlistCards"}}
+<div class="toolbar-actions">
+  <button id="randomize-selected" class="btn btn-primary hidden" onclick="randomizeSelected()">Randomize Selected (<span id="selected-count">0</span>)</button>
+</div>
+{{range $i, $pl := .}}
 <div class="playlist-card">
+  <label class="playlist-checkbox">
+    <input type="checkbox" class="pl-checkbox" data-id="{{$pl.ID}}" data-title="{{$pl.Title}}" data-count="{{$pl.ItemCount}}" onchange="updateSelected()">
+  </label>
   <div class="playlist-info">
-    <span class="playlist-title">{{.Title}}</span>
-    <span class="playlist-count">{{.ItemCountStr}} videos &middot; ~{{.Cost}} quota</span>
+    <span class="playlist-title">{{$pl.Title}}</span>
+    <span class="playlist-count">{{$pl.ItemCountStr}} videos &middot; ~{{$pl.Cost}} quota</span>
   </div>
-  <button class="{{.ButtonClass}}" hx-get="{{.ModalURL}}" hx-target="#modal" hx-swap="innerHTML" hx-on::after-request="showModal()">{{.ButtonText}}</button>
+  <div class="playlist-actions">
+    <button class="btn btn-secondary btn-sm" hx-get="/api/playlists/preview/html?id={{$pl.ID}}&title={{$pl.Title}}" hx-target="#preview-modal" hx-swap="innerHTML" hx-on::after-request="showPreviewModal()">Preview</button>
+    <button class="{{$pl.ButtonClass}}" hx-get="{{$pl.ModalURL}}" hx-target="#modal" hx-swap="innerHTML" hx-on::after-request="showModal()">{{$pl.ButtonText}}</button>
+  </div>
 </div>
 {{end}}{{end}}
+
+{{define "previewModal"}}
+<div id="preview-modal" class="modal-content preview-modal-content">
+  <div class="preview-header">
+    <h2>{{.Title}}</h2>
+    <span class="preview-count">{{.ShowCount}} of {{.TotalItems}} videos</span>
+  </div>
+  <div class="preview-scroll">
+    {{range .Items}}
+    <div class="preview-item">
+      {{if .ThumbnailURL}}<img src="{{.ThumbnailURL}}" alt="" class="preview-thumb" loading="lazy">{{end}}
+      <div class="preview-info">
+        <a href="https://www.youtube.com/watch?v={{.VideoID}}" target="_blank" class="preview-title">{{.Title}}</a>
+        {{if .ChannelTitle}}<span class="preview-channel">{{.ChannelTitle}}</span>{{end}}
+      </div>
+    </div>
+    {{else}}
+    <p class="no-results">No items found.</p>
+    {{end}}
+  </div>
+  {{if gt .TotalItems 50}}<p class="preview-more">+ {{minus .TotalItems .ShowCount}} more videos not shown</p>{{end}}
+  <div class="modal-actions">
+    <button type="button" class="btn btn-secondary" onclick="closePreviewModal()">Close</button>
+  </div>
+</div>
+{{end}}

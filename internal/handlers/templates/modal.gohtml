@@ -5,7 +5,7 @@
   <p class="quota-cost {{.QuotaCostClass}}">Estimated quota cost: {{.Cost}} units ({{.QuotaText}})</p>
   {{if .WarningHTML}}{{.WarningHTML}}{{end}}
   <form hx-post="/api/randomize/html" hx-target="#progress-modal" hx-swap="innerHTML" hx-on::after-request="showProgressModal()">
-    <input type="hidden" name="playlistId" value="{{.PlaylistID}}">
+    <input type="hidden" name="playlistId" value="{{.FirstID}}">
     <label for="new-name">Name for new randomized playlist:</label>
     <input type="text" id="new-name" name="newName" placeholder="Enter playlist name" value="{{.DefaultName}}" required>
     <div class="modal-actions">

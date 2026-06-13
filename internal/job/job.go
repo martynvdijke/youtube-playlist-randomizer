@@ -11,6 +11,7 @@ import (
 
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/gotify"
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/logging"
+	"github.com/martynvdijke/youtube-playlist-randomizer/internal/models"
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/store"
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/telemetry"
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/youtube"
@@ -80,8 +81,9 @@ func New(s *store.Store, l *logging.Logger, yt *youtube.Client, ot *telemetry.Te
 }
 
 // Run starts a new playlist shuffle job in a background goroutine and
-// returns a Progress object for immediate polling.
-func (r *Runner) Run(ctx context.Context, jobID, playlistID, newName string) *Progress {
+// returns a Progress object for immediate polling. playlistIDs accepts
+// one or more source playlist IDs whose items are merged and shuffled together.
+func (r *Runner) Run(ctx context.Context, jobID, newName string, playlistIDs ...string) *Progress {
 	jp := &Progress{Status: StatusPending}
 	if r.ytClient == nil {
 		jp.mu.Lock()
@@ -91,7 +93,15 @@ func (r *Runner) Run(ctx context.Context, jobID, playlistID, newName string) *Pr
 		r.store.SetJobError(jobID, "YouTube API not available")
 		return jp
 	}
-	go r.run(ctx, jobID, playlistID, newName, jp)
+	if len(playlistIDs) == 0 {
+		jp.mu.Lock()
+		jp.Status = StatusError
+		jp.Error = "No playlist IDs provided"
+		jp.mu.Unlock()
+		r.store.SetJobError(jobID, "No playlist IDs provided")
+		return jp
+	}
+	go r.run(ctx, jobID, newName, jp, playlistIDs...)
 	return jp
 }
 
@@ -109,15 +119,18 @@ func (r *Runner) Resume(ctx context.Context, j store.Job) *Progress {
 }
 
 // run is the full shuffle job life cycle, run in a goroutine.
-func (r *Runner) run(ctx context.Context, jobID, playlistID, newName string, jp *Progress) {
+func (r *Runner) run(ctx context.Context, jobID, newName string, jp *Progress, playlistIDs ...string) {
 	var span trace.Span
 	if r.otel != nil {
+		attrs := []attribute.KeyValue{
+			attribute.String("job.id", jobID),
+			attribute.String("playlist.name", newName),
+		}
+		for i, id := range playlistIDs {
+			attrs = append(attrs, attribute.String(fmt.Sprintf("playlist.%d.id", i), id))
+		}
 		ctx, span = r.otel.Tracer.Start(ctx, "runJob",
-			trace.WithAttributes(
-				attribute.String("job.id", jobID),
-				attribute.String("playlist.id", playlistID),
-				attribute.String("playlist.name", newName),
-			),
+			trace.WithAttributes(attrs...),
 		)
 		defer span.End()
 	}
@@ -168,38 +181,42 @@ func (r *Runner) run(ctx context.Context, jobID, playlistID, newName string, jp 
 		return
 	}
 
-	// --- Phase 2: Fetch items ---
+	// --- Phase 2: Fetch items from all source playlists ---
 	updateStatus(StatusFetching)
 
-	items, err := r.ytClient.GetPlaylistItems(ctx, playlistID)
-	if err != nil {
-		if youtube.IsQuotaError(err) {
-			r.logger.Warnc(ctx, fmt.Sprintf("Quota error fetching items for job %s. Pausing.", jobID))
-			updateStatus(StatusPaused)
-			r.store.SetJobPaused(jobID)
-			r.sendNotification("⏸ Shuffle Paused", fmt.Sprintf("Playlist %q paused — API quota exhausted while fetching items.", newName))
-			if r.otel != nil {
-				r.otel.RecordJobPaused(context.Background(), 0, 0)
+	var allItems []models.PlayListItem
+	for _, pid := range playlistIDs {
+		items, err := r.ytClient.GetPlaylistItems(ctx, pid)
+		if err != nil {
+			if youtube.IsQuotaError(err) {
+				r.logger.Warnc(ctx, fmt.Sprintf("Quota error fetching items for job %s. Pausing.", jobID))
+				updateStatus(StatusPaused)
+				r.store.SetJobPaused(jobID)
+				r.sendNotification("⏸ Shuffle Paused", fmt.Sprintf("Playlist %q paused — API quota exhausted while fetching items.", newName))
+				if r.otel != nil {
+					r.otel.RecordJobPaused(context.Background(), 0, 0)
+				}
+				return
 			}
+			setError(fmt.Sprintf("Failed to fetch playlist items from %s: %v", pid, err))
 			return
 		}
-		setError(fmt.Sprintf("Failed to fetch playlist items: %v", err))
-		return
-	}
-	if _, err := r.store.AddQuota(store.QuotaListPlaylistItems); err != nil {
-		r.logger.Warnc(ctx, "failed to track quota", "error", err.Error())
+		if _, err := r.store.AddQuota(store.QuotaListPlaylistItems); err != nil {
+			r.logger.Warnc(ctx, "failed to track quota", "error", err.Error())
+		}
+		allItems = append(allItems, items...)
 	}
 
-	if len(items) == 0 {
-		setError("Playlist has no items")
+	if len(allItems) == 0 {
+		setError("All selected playlists are empty")
 		return
 	}
 
 	// --- Phase 3: Shuffle ---
 	updateStatus(StatusShuffling)
 
-	shuffled := make([]string, len(items))
-	for i, item := range items {
+	shuffled := make([]string, len(allItems))
+	for i, item := range allItems {
 		shuffled[i] = item.VideoID
 	}
 	rand.Shuffle(len(shuffled), func(i, j int) {
@@ -429,7 +446,7 @@ func (r *Runner) ResumePending(ctx context.Context) {
 		switch j.Status {
 		case "pending":
 			r.logger.Infoc(ctx, fmt.Sprintf("Found queued job: %s -> %s", j.SourcePlaylistID, j.NewName))
-			r.Run(ctx, j.ID, j.SourcePlaylistID, j.NewName)
+			r.Run(ctx, j.ID, j.NewName, j.SourcePlaylistIDs...)
 		case "paused":
 			pausedAt, parseErr := time.Parse(time.RFC3339, j.PausedAt)
 			if parseErr == nil && time.Since(pausedAt) < 24*time.Hour {

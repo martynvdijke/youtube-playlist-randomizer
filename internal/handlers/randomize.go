@@ -24,14 +24,18 @@ func (h *Handlers) handleRandomize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.PlaylistID == "" || req.NewName == "" {
-		writeError(w, http.StatusBadRequest, "playlistId and newName are required")
+	ids := req.PlaylistIDs
+	if len(ids) == 0 && req.PlaylistID != "" {
+		ids = []string{req.PlaylistID}
+	}
+	if len(ids) == 0 || req.NewName == "" {
+		writeError(w, http.StatusBadRequest, "playlistId(s) and newName are required")
 		return
 	}
 
 	jobID := fmt.Sprintf("%d", time.Now().UnixNano())
 
-	if err := h.store.CreateJob(jobID, req.PlaylistID, "", req.NewName); err != nil {
+	if err := h.store.CreateJob(jobID, ids[0], "", req.NewName, ids[1:]...); err != nil {
 		writeError(w, http.StatusInternalServerError, "Failed to create job")
 		return
 	}
@@ -40,7 +44,7 @@ func (h *Handlers) handleRandomize(w http.ResponseWriter, r *http.Request) {
 		h.otel.RecordJobCreated(r.Context())
 	}
 
-	jp := h.jobRunner.Run(r.Context(), jobID, req.PlaylistID, req.NewName)
+	jp := h.jobRunner.Run(r.Context(), jobID, req.NewName, ids...)
 
 	writeJSON(w, http.StatusAccepted, JobResponse{JobID: jobID, Status: jp.Status})
 }
@@ -59,24 +63,24 @@ func (h *Handlers) handleRandomizeHTML(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	playlistID := r.FormValue("playlistId")
+	playlistIDs := r.Form["playlistId"]
 	newName := r.FormValue("newName")
 
-	if playlistID == "" || newName == "" {
+	if len(playlistIDs) == 0 || newName == "" {
 		w.WriteHeader(http.StatusBadRequest)
-		tmpl.ExecuteTemplate(w, "randomizeError", RandomizeErrorData{Error: "playlistId and newName are required"})
+		tmpl.ExecuteTemplate(w, "randomizeError", RandomizeErrorData{Error: "playlistId(s) and newName are required"})
 		return
 	}
 
 	jobID := fmt.Sprintf("%d", time.Now().UnixNano())
 
-	if err := h.store.CreateJob(jobID, playlistID, "", newName); err != nil {
+	if err := h.store.CreateJob(jobID, playlistIDs[0], "", newName, playlistIDs[1:]...); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		tmpl.ExecuteTemplate(w, "randomizeError", RandomizeErrorData{Error: fmt.Sprintf("Failed to create job: %s", err.Error())})
 		return
 	}
 
-	jp := h.jobRunner.Run(r.Context(), jobID, playlistID, newName)
+	jp := h.jobRunner.Run(r.Context(), jobID, newName, playlistIDs...)
 
 	writeJobProgressHTML(w, jobID, jp)
 }

@@ -70,7 +70,16 @@
 
 <!-- Progress Modal -->
 <div id="progress-modal" class="modal hidden"></div>
+
+<!-- Preview Modal -->
+<div id="preview-modal" class="modal hidden"></div>
+
+<!-- Undo result -->
+<div id="undo-result" class="toast hidden"></div>
+
 <script>
+let selectedPlaylists = [];
+
 function showMain() {
   document.getElementById('admin-panel').classList.remove('visible');
   document.getElementById('playlists').style.display = '';
@@ -89,6 +98,69 @@ function showAdmin() {
   document.getElementById('nav-main').classList.remove('active');
   document.getElementById('nav-admin').classList.add('active');
 }
+
+function updateSelected() {
+  const checkboxes = document.querySelectorAll('.pl-checkbox:checked');
+  selectedPlaylists = Array.from(checkboxes).map(cb => ({
+    id: cb.dataset.id,
+    title: cb.dataset.title
+  }));
+  const count = selectedPlaylists.length;
+  const btn = document.getElementById('randomize-selected');
+  const countSpan = document.getElementById('selected-count');
+  if (count > 0) {
+    btn.classList.remove('hidden');
+    countSpan.textContent = count;
+  } else {
+    btn.classList.add('hidden');
+  }
+}
+
+function randomizeSelected() {
+  if (selectedPlaylists.length === 0) return;
+  closeModal();
+  // Build comma-separated IDs and titles
+  const ids = selectedPlaylists.map(p => p.id);
+  const title = selectedPlaylists.length === 1
+    ? selectedPlaylists[0].title
+    : selectedPlaylists[0].title + ' +' + (selectedPlaylists.length - 1) + ' more';
+
+  // Load modal with multi-playlist support
+  const params = new URLSearchParams({ id: ids[0], itemCount: '0', title: title });
+  fetch('/api/modal/html?' + params.toString())
+    .then(r => r.text())
+    .then(html => {
+      document.getElementById('modal').innerHTML = html;
+      // Add hidden inputs for all playlist IDs
+      const form = document.querySelector('#modal form');
+      if (form) {
+        ids.forEach(id => {
+          const input = document.createElement('input');
+          input.type = 'hidden';
+          input.name = 'playlistId';
+          input.value = id;
+          form.appendChild(input);
+        });
+      }
+      showModal();
+    });
+}
+
+function showPreviewModal() {
+  const modal = document.getElementById('preview-modal');
+  if (modal) modal.classList.remove('hidden');
+}
+function closePreviewModal() {
+  const modal = document.getElementById('preview-modal');
+  if (modal) {
+    modal.classList.add('hidden');
+    modal.innerHTML = '';
+  }
+}
+window.showPreviewModal = showPreviewModal;
+window.closePreviewModal = closePreviewModal;
+window.updateSelected = updateSelected;
+window.randomizeSelected = randomizeSelected;
 </script>
 </body>
 </html>

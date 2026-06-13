@@ -80,10 +80,10 @@
 
 {{define "jobQueue"}}
 <div id="job-queue" class="job-queue">
-  <h3>Resume Queue</h3>
+  <h3>Job Queue</h3>
   <div class="job-table-wrapper">
     <table class="job-table">
-      <thead><tr><th>Status</th><th>Playlist</th><th>New Name</th><th>Progress</th><th>Created</th><th>Action</th></tr></thead>
+      <thead><tr><th>Status</th><th>Playlist</th><th>New Name</th><th>Progress</th><th>Created</th><th>Action</th><th>Undo</th></tr></thead>
       <tbody>
         {{range .}}
         <tr>
@@ -93,6 +93,7 @@
           <td>{{.Progress}}</td>
           <td>{{.Created}}</td>
           <td>{{if .ActionHTML}}{{.ActionHTML}}{{end}}</td>
+          <td>{{if .UndoHTML}}{{.UndoHTML}}{{end}}</td>
         </tr>
         {{end}}
       </tbody>

@@ -3,7 +3,7 @@ package models
 import "testing"
 
 func TestPlayListItemInitialization(t *testing.T) {
-	item := NewPlayListItem("id1", "Test Video", "2024-01-15T10:00:00Z", "UC123", "A test description", "vid123")
+	item := NewPlayListItem("id1", "Test Video", "2024-01-15T10:00:00Z", "UC123", "ChannelName", "A test description", "vid123", "https://example.com/thumb.jpg")
 
 	if item.ID != "id1" {
 		t.Errorf("expected ID 'id1', got '%s'", item.ID)
@@ -17,25 +17,31 @@ func TestPlayListItemInitialization(t *testing.T) {
 	if item.ChannelID != "UC123" {
 		t.Errorf("expected ChannelID 'UC123', got '%s'", item.ChannelID)
 	}
+	if item.ChannelTitle != "ChannelName" {
+		t.Errorf("expected ChannelTitle 'ChannelName', got '%s'", item.ChannelTitle)
+	}
 	if item.Description != "A test description" {
 		t.Errorf("expected Description 'A test description', got '%s'", item.Description)
 	}
 	if item.VideoID != "vid123" {
 		t.Errorf("expected VideoID 'vid123', got '%s'", item.VideoID)
 	}
+	if item.ThumbnailURL != "https://example.com/thumb.jpg" {
+		t.Errorf("expected ThumbnailURL 'https://example.com/thumb.jpg', got '%s'", item.ThumbnailURL)
+	}
 }
 
 func TestPlayListItemEmptyInitialization(t *testing.T) {
-	item := NewPlayListItem("", "", "", "", "", "")
+	item := NewPlayListItem("", "", "", "", "", "", "", "")
 
 	if item.ID != "" || item.Title != "" || item.PublishedAt != "" ||
-		item.ChannelID != "" || item.Description != "" || item.VideoID != "" {
+		item.ChannelID != "" || item.ChannelTitle != "" || item.Description != "" || item.VideoID != "" || item.ThumbnailURL != "" {
 		t.Error("expected all fields to be empty")
 	}
 }
 
 func TestPlayListItemPartialInitialization(t *testing.T) {
-	item := NewPlayListItem("id1", "Test Video", "", "", "", "")
+	item := NewPlayListItem("id1", "Test Video", "", "", "", "", "", "")
 
 	if item.ID != "id1" {
 		t.Errorf("expected ID 'id1', got '%s'", item.ID)

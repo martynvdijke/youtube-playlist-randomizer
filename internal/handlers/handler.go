@@ -24,7 +24,9 @@ import (
 var templateFS embed.FS
 
 // tmpl holds all parsed HTML templates.
-var tmpl = template.Must(template.New("").ParseFS(templateFS, "templates/*.gohtml"))
+var tmpl = template.Must(template.New("").Funcs(template.FuncMap{
+	"minus": func(a, b int) int { return a - b },
+}).ParseFS(templateFS, "templates/*.gohtml"))
 
 // Config holds all dependencies needed by the handlers.
 type Config struct {
@@ -85,8 +87,10 @@ func (h *Handlers) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/modal/html", h.handleModalHTML)
 	mux.HandleFunc("/api/randomize", h.handleRandomize)
 	mux.HandleFunc("/api/randomize/html", h.handleRandomizeHTML)
+	mux.HandleFunc("/api/playlists/preview/html", h.handlePlaylistPreviewHTML)
 	mux.HandleFunc("/api/jobs/", h.handleJobStatus)
 	mux.HandleFunc("/api/jobs/resume", h.handleForceResume)
+	mux.HandleFunc("/api/jobs/undo", h.handleUndo)
 	mux.HandleFunc("/api/jobs/queue/html", h.handleJobQueueHTML)
 	mux.HandleFunc("/callback", h.handleOAuthCallback)
 	mux.HandleFunc("/api/auth", h.handleAuth)
@@ -125,8 +129,9 @@ type (
 	}
 
 	RandomizeRequest struct {
-		PlaylistID string `json:"playlistId"`
-		NewName    string `json:"newName"`
+		PlaylistID  string   `json:"playlistId"`
+		PlaylistIDs []string `json:"playlistIds"`
+		NewName     string   `json:"newName"`
 	}
 
 	JobResponse struct {
@@ -159,18 +164,35 @@ type (
 	}
 
 	PlaylistCardData struct {
-		ID          string
-		Title       string
-		ItemCount   int
+		ID           string
+		Title        string
+		ItemCount    int
 		ItemCountStr string
-		Cost        int
-		ButtonClass string
-		ButtonText  string
-		ModalURL    template.URL
+		Cost         int
+		ButtonClass  string
+		ButtonText   string
+		ModalURL     template.URL
+		PreviewURL   template.URL
+		PlaylistIdx  int
+	}
+
+	PreviewItemData struct {
+		ThumbnailURL string
+		Title        string
+		VideoID      string
+		ChannelTitle string
+	}
+
+	previewModalData struct {
+		Title      string
+		TotalItems int
+		ShowCount  int
+		Items      []PreviewItemData
 	}
 
 	ModalData struct {
-		PlaylistID     string
+		PlaylistIDs    string
+		FirstID        string
 		Title          string
 		DefaultName    string
 		Cost           int
@@ -206,6 +228,7 @@ type (
 		Progress    string
 		Created     string
 		ActionHTML  template.HTML
+		UndoHTML    template.HTML
 	}
 )
 

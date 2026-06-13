@@ -163,9 +163,9 @@ func TestRun_SuccessfulFlow(t *testing.T) {
 		*models.NewPlaylist("pl1", "Music"),
 	}
 	items := []models.PlayListItem{
-		models.NewPlayListItem("item1", "Song 1", "2024-01-01", "UC1", "Desc", "vid1"),
-		models.NewPlayListItem("item2", "Song 2", "2024-01-02", "UC1", "Desc", "vid2"),
-		models.NewPlayListItem("item3", "Song 3", "2024-01-03", "UC1", "Desc", "vid3"),
+		models.NewPlayListItem("item1", "Song 1", "2024-01-01", "UC1", "", "Desc", "vid1", ""),
+		models.NewPlayListItem("item2", "Song 2", "2024-01-02", "UC1", "", "Desc", "vid2", ""),
+		models.NewPlayListItem("item3", "Song 3", "2024-01-03", "UC1", "", "Desc", "vid3", ""),
 	}
 
 	client := &mockYouTubeClient{
@@ -249,8 +249,8 @@ func TestPopulateNewPlaylist_InsertError(t *testing.T) {
 	}
 
 	pl := models.NewPlaylist("original", "Music")
-	pl.AddItem(models.NewPlayListItem("item1", "Song 1", "", "", "", "vid1"))
-	pl.AddItem(models.NewPlayListItem("item2", "Song 2", "", "", "", "vid2"))
+	pl.AddItem(models.NewPlayListItem("item1", "Song 1", "", "", "", "", "vid1", ""))
+	pl.AddItem(models.NewPlayListItem("item2", "Song 2", "", "", "", "", "vid2", ""))
 
 	err := r.populateNewPlaylist(context.Background(), pl)
 	if err != nil {
@@ -314,8 +314,8 @@ func TestChoosePlaylist_Empty(t *testing.T) {
 
 func TestRandomizePlaylist(t *testing.T) {
 	items := []models.PlayListItem{
-		models.NewPlayListItem("item1", "Video 1", "", "", "", "vid1"),
-		models.NewPlayListItem("item2", "Video 2", "", "", "", "vid2"),
+		models.NewPlayListItem("item1", "Video 1", "", "", "", "", "vid1", ""),
+		models.NewPlayListItem("item2", "Video 2", "", "", "", "", "vid2", ""),
 	}
 
 	client := &mockYouTubeClient{
