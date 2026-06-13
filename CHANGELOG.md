@@ -1,3 +1,10 @@
+# [1.15.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.14.0...v1.15.0) (2026-06-13)
+
+
+### Features
+
+* add archive/delete for old shuffle jobs with tests ([9c3170a](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/9c3170af80955a9686c37a34a047d38d9a9907af))
+
 # [1.14.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.13.0...v1.14.0) (2026-06-13)
 
 
