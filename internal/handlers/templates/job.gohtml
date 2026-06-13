@@ -1,0 +1,102 @@
+{{define "jobProgressPending"}}
+<div id="progress-content" class="modal-content" hx-get="/api/jobs/{{.JobID}}/html" hx-trigger="every 30000ms" hx-swap="outerHTML">
+  <h2>Queued</h2>
+  <div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>
+  <p>Waiting for API quota to become available. The job will run automatically when quota resets.</p>
+  <div style="text-align:center;margin-top:12px">
+    <button class="btn btn-primary" onclick="closeProgressModal()">OK</button>
+  </div>
+</div>
+{{end}}
+
+{{define "jobProgressWorking"}}
+<div id="progress-content" class="modal-content" hx-get="/api/jobs/{{.JobID}}/html" hx-trigger="every 1500ms" hx-swap="outerHTML">
+  <h2>Randomizing...</h2>
+  <div class="progress-bar"><div class="progress-fill" style="width:{{.Pct}}%"></div></div>
+  <p>{{.Label}}{{if gt .Total 0}} {{.Done}} / {{.Total}}{{end}}</p>
+</div>
+{{end}}
+
+{{define "jobProgressDone"}}
+<div id="progress-result" class="modal-content" hx-get="/api/quota/html" hx-trigger="load" hx-target="#quota-bar" hx-swap="innerHTML">
+  <h2>Randomizing...</h2>
+  <div class="progress-bar"><div class="progress-fill progress-done" style="width:100%"></div></div>
+  <p>Playlist created successfully!</p>
+  <div id="progress-result" style="text-align:center">
+    {{if .NewPlaylistURL}}<a id="playlist-link" href="{{.NewPlaylistURL}}" target="_blank">Open in YouTube</a>{{end}}
+    <button class="btn btn-primary" onclick="closeProgressModal()">Done</button>
+  </div>
+</div>
+{{end}}
+
+{{define "jobProgressPaused"}}
+<div id="progress-paused-content" class="modal-content" hx-get="/api/jobs/{{.JobID}}/html" hx-trigger="every 60000ms" hx-swap="outerHTML">
+  <h2>Randomizing...</h2>
+  <div class="progress-bar"><div class="progress-fill" style="width:{{.Pct}}%"></div></div>
+  <p>Inserted {{.Done}} / {{.Total}} items</p>
+  <div class="paused-banner">
+    <p>Quota exhausted. Progress saved.</p>
+    <p class="paused-sub">Auto-resume in ~24h (or force-resume below if quota is available).</p>
+    <div style="display:flex;gap:8px;justify-content:center;margin-top:12px">
+      <button class="btn btn-primary" onclick="closeProgressModal()">OK</button>
+      <button class="btn btn-warning" hx-post="/api/jobs/resume" {{.ResumeBtnAttr}} hx-target="#progress-paused-content" hx-swap="outerHTML">Resume Now</button>
+    </div>
+  </div>
+</div>
+{{end}}
+
+{{define "jobProgressError"}}
+<div id="progress-error-content" class="modal-content">
+  <h2>Randomizing...</h2>
+  <div class="progress-bar"><div class="progress-fill" style="width:100%"></div></div>
+  <p class="error">{{.Error}}</p>
+  <div style="text-align:center;margin-top:12px">
+    <button class="btn btn-primary" onclick="closeProgressModal()">OK</button>
+  </div>
+</div>
+{{end}}
+
+{{define "jobProgressDefault"}}
+<div id="progress-content" class="modal-content" hx-get="/api/jobs/{{.JobID}}/html" hx-trigger="every 1500ms" hx-swap="outerHTML">
+  <h2>Randomizing...</h2>
+  <div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>
+  <p>Starting...</p>
+</div>
+{{end}}
+
+{{define "forceResumePending"}}
+<div id="progress-content" class="modal-content" hx-get="/api/jobs/{{.JobID}}/html" hx-trigger="every 1500ms" hx-swap="outerHTML">
+  <p>Force-resumed! Starting job...</p>
+</div>
+{{end}}
+
+{{define "forceResumeContinue"}}
+<div id="progress-content" class="modal-content" hx-get="/api/jobs/{{.JobID}}/html" hx-trigger="every 1500ms" hx-swap="outerHTML">
+  <p>Force-resumed! Continuing job...</p>
+</div>
+{{end}}
+
+{{define "noJobs"}}<div id="job-queue" class="job-queue hidden"></div>{{end}}
+
+{{define "jobQueue"}}
+<div id="job-queue" class="job-queue">
+  <h3>Resume Queue</h3>
+  <div class="job-table-wrapper">
+    <table class="job-table">
+      <thead><tr><th>Status</th><th>Playlist</th><th>New Name</th><th>Progress</th><th>Created</th><th>Action</th></tr></thead>
+      <tbody>
+        {{range .}}
+        <tr>
+          <td class="status-{{.StatusClass}}">{{.Status}}</td>
+          <td title="{{.Title}}">{{.Title}}</td>
+          <td title="{{.NewName}}">{{.NewName}}</td>
+          <td>{{.Progress}}</td>
+          <td>{{.Created}}</td>
+          <td>{{if .ActionHTML}}{{.ActionHTML}}{{end}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+</div>
+{{end}}

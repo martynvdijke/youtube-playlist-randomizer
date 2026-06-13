@@ -1,9 +1,10 @@
 package admin
 
 import (
+	"embed"
 	"encoding/json"
 	"fmt"
-	"html"
+	"html/template"
 	"io"
 	"net/http"
 	"strconv"
@@ -11,6 +12,63 @@ import (
 
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/logging"
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/store"
+)
+
+//go:embed templates/*.gohtml
+var templateFS embed.FS
+
+// adminTmpl holds all parsed admin HTML templates.
+var adminTmpl = template.Must(template.New("").ParseFS(templateFS, "templates/*.gohtml"))
+
+// Template data types.
+type (
+	logViewerData struct {
+		Total       int
+		CountDebug  int
+		CountInfo   int
+		CountWarn   int
+		CountError  int
+		MinLevel    string
+		Source      string
+		Entries     []logEntryData
+	}
+
+	logEntryData struct {
+		Timestamp     string
+		Severity      string
+		SeverityLower string
+		Source        string
+		Message       string
+		Attributes    string
+	}
+
+	otelSettingsData struct {
+		Endpoint         string
+		TracesEnabled    bool
+		MetricsEnabled   bool
+		TraceSampleRate  string
+		Headers          string
+	}
+
+	umamiSettingsData struct {
+		URL       string
+		WebsiteID string
+		ScriptURL string
+	}
+
+	gotifySettingsData struct {
+		URL     string
+		Token   string
+		Enabled bool
+	}
+
+	verbosityData struct {
+		Level string
+	}
+
+	errorData struct {
+		Error string
+	}
 )
 
 type Handlers struct {
@@ -57,15 +115,7 @@ func (h *Handlers) HandleLogsHTML(w http.ResponseWriter, r *http.Request) {
 	h.writeLogViewer(w, entries, counts, minLevel, source)
 }
 
-func selected(current, value string) string {
-	if current == value {
-		return ` selected`
-	}
-	return ""
-}
-
 func shortTimestamp(ts string) string {
-	// RFC3339 -> short: "15:04:05"
 	if len(ts) >= 19 {
 		return ts[11:19]
 	}
@@ -85,78 +135,29 @@ func (h *Handlers) writeLogViewer(w io.Writer, entries []store.LogEntry, counts 
 	for _, c := range counts {
 		countMap[c.Severity] = c.Count
 	}
-	countStr := fmt.Sprintf("Showing %d entries (%d DEBUG, %d INFO, %d WARN, %d ERROR)",
-		total, countMap["DEBUG"], countMap["INFO"], countMap["WARN"], countMap["ERROR"])
 
-	// Severity filter dropdown
-	fmt.Fprintf(w, `<div class="admin-log-controls">
-  <div class="log-count">%s</div>
-  <div class="log-filters">
-    <label>Severity: </label>
-    <select name="min_level" hx-get="/api/admin/logs/html" hx-trigger="change" hx-target="#admin-content" hx-swap="innerHTML" hx-include="this">
-      <option value="DEBUG"%s>DEBUG</option>
-      <option value="INFO"%s>INFO</option>
-      <option value="WARN"%s>WARN</option>
-      <option value="ERROR"%s>ERROR</option>
-    </select>
-    <label>Source: </label>
-    <input type="text" name="source" placeholder="Filter by source..." value="%s" hx-get="/api/admin/logs/html" hx-trigger="keyup changed delay:300ms" hx-target="#admin-content" hx-swap="innerHTML" hx-include="this">
-  </div>
-</div>`,
-		countStr,
-		selected(minLevel, "DEBUG"), selected(minLevel, "INFO"),
-		selected(minLevel, "WARN"), selected(minLevel, "ERROR"),
-		html.EscapeString(source))
-
-	// Verbosity control
-	fmt.Fprintf(w, `<div class="admin-verbosity">
-  <label>Minimum log level: </label>
-  <select name="log_level" hx-post="/api/admin/settings/log_level" hx-trigger="change" hx-target="#verbosity-status" hx-swap="innerHTML">
-    <option value="DEBUG"%s>DEBUG</option>
-    <option value="INFO"%s>INFO</option>
-    <option value="WARN"%s>WARN</option>
-    <option value="ERROR"%s>ERROR</option>
-  </select>
-  <span id="verbosity-status"></span>
-</div>`,
-		selected(minLevel, "DEBUG"), selected(minLevel, "INFO"),
-		selected(minLevel, "WARN"), selected(minLevel, "ERROR"))
-
-	// Log table
-	fmt.Fprint(w, `<table class="log-table">
-  <thead>
-    <tr>
-      <th>Timestamp</th>
-      <th>Severity</th>
-      <th>Source</th>
-      <th>Message</th>
-      <th>Attributes</th>
-    </tr>
-  </thead>
-  <tbody>`)
-
-	if len(entries) == 0 {
-		fmt.Fprint(w, `<tr><td colspan="5" class="log-empty">No log entries found.</td></tr>`)
-	} else {
-		for _, e := range entries {
-			sevClass := "log-sev-" + strings.ToLower(e.Severity)
-			fmt.Fprintf(w, `<tr class="%s">
-  <td class="log-ts">%s</td>
-  <td class="log-sev">%s</td>
-  <td class="log-src">%s</td>
-  <td class="log-msg">%s</td>
-  <td class="log-attrs">%s</td>
-</tr>`,
-				sevClass,
-				html.EscapeString(shortTimestamp(e.Timestamp)),
-				html.EscapeString(e.Severity),
-				html.EscapeString(e.Source),
-				html.EscapeString(e.Message),
-				html.EscapeString(truncateAttrs(e.Attributes, 60)))
-		}
+	entryData := make([]logEntryData, 0, len(entries))
+	for _, e := range entries {
+		entryData = append(entryData, logEntryData{
+			Timestamp:     shortTimestamp(e.Timestamp),
+			Severity:      e.Severity,
+			SeverityLower: strings.ToLower(e.Severity),
+			Source:        e.Source,
+			Message:       e.Message,
+			Attributes:    truncateAttrs(e.Attributes, 60),
+		})
 	}
 
-	fmt.Fprint(w, `</tbody></table>`)
+	adminTmpl.ExecuteTemplate(w, "logViewer", logViewerData{
+		Total:      total,
+		CountDebug: countMap["DEBUG"],
+		CountInfo:  countMap["INFO"],
+		CountWarn:  countMap["WARN"],
+		CountError: countMap["ERROR"],
+		MinLevel:   minLevel,
+		Source:     source,
+		Entries:    entryData,
+	})
 }
 
 // HandleLogLevelGet returns the current log level setting as plain text.
@@ -200,13 +201,6 @@ func (h *Handlers) loadOTelSettings() otelAdminSettings {
 	}
 }
 
-func checked(val, expected string) string {
-	if val == expected {
-		return ` checked`
-	}
-	return ""
-}
-
 // HandleSettingsOTel handles GET/POST for OpenTelemetry settings.
 func (h *Handlers) HandleSettingsOTel(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
@@ -236,7 +230,7 @@ func (h *Handlers) HandleSettingsOTel(w http.ResponseWriter, r *http.Request) {
 			h.logger.Errorc(r.Context(), "Invalid OTel endpoint URL scheme", "url", endpoint)
 			w.Header().Set("Content-Type", "text/html")
 			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprint(w, `<span class="error">URL must start with http:// or https://</span>`)
+			adminTmpl.ExecuteTemplate(w, "errorSpan", errorData{Error: "URL must start with http:// or https://"})
 			return
 		}
 
@@ -245,7 +239,7 @@ func (h *Handlers) HandleSettingsOTel(w http.ResponseWriter, r *http.Request) {
 			h.logger.Errorc(r.Context(), "Invalid OTel trace sample rate", "rate", traceSampleRate)
 			w.Header().Set("Content-Type", "text/html")
 			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprint(w, `<span class="error">Trace sample rate must be a number between 0 and 1</span>`)
+			adminTmpl.ExecuteTemplate(w, "errorSpan", errorData{Error: "Trace sample rate must be a number between 0 and 1"})
 			return
 		}
 
@@ -256,7 +250,7 @@ func (h *Handlers) HandleSettingsOTel(w http.ResponseWriter, r *http.Request) {
 				h.logger.Errorc(r.Context(), "Invalid OTel headers JSON", "error", err.Error())
 				w.Header().Set("Content-Type", "text/html")
 				w.WriteHeader(http.StatusBadRequest)
-				fmt.Fprint(w, `<span class="error">Headers must be a valid JSON object</span>`)
+				adminTmpl.ExecuteTemplate(w, "errorSpan", errorData{Error: "Headers must be a valid JSON object"})
 				return
 			}
 		}
@@ -273,14 +267,14 @@ func (h *Handlers) HandleSettingsOTel(w http.ResponseWriter, r *http.Request) {
 				h.logger.Errorc(r.Context(), "Failed to save OTel setting", "key", key, "error", err.Error())
 				w.Header().Set("Content-Type", "text/html")
 				w.WriteHeader(http.StatusInternalServerError)
-				fmt.Fprint(w, `<span class="error">Failed to save setting</span>`)
+				adminTmpl.ExecuteTemplate(w, "errorSpan", errorData{Error: "Failed to save setting"})
 				return
 			}
 		}
 
 		h.logger.Infoc(r.Context(), "OTel settings updated", "traces", tracesEnabled, "metrics", metricsEnabled, "sample_rate", traceSampleRate)
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprintf(w, `<span class="restart-required">✓ Saved — restart required to apply</span>`)
+		adminTmpl.ExecuteTemplate(w, "savedOk", nil)
 
 	default:
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -297,84 +291,13 @@ func (h *Handlers) HandleSettingsOTelHTML(w http.ResponseWriter, r *http.Request
 	settings := h.loadOTelSettings()
 
 	w.Header().Set("Content-Type", "text/html")
-	fmt.Fprintf(w, `<div class="admin-settings-otel">
-  <h3>OpenTelemetry</h3>
-  <p class="settings-desc">Configure OTLP exporting for traces and metrics. Changes require a server restart to take effect.</p>
-  <form hx-post="/api/admin/settings/otel" hx-target="#otel-status" hx-swap="innerHTML">
-    <div class="form-field">
-      <label for="otel-endpoint">OTLP Endpoint URL</label>
-      <input type="url" id="otel-endpoint" name="endpoint" placeholder="http://otel-collector:4318" value="%s">
-      <p class="field-hint">Leave empty to disable OTLP exporting. Falls back to <code>OTEL_EXPORTER_OTLP_ENDPOINT</code> env var.</p>
-    </div>
-    <div class="form-field form-field-row">
-      <label class="toggle-label">
-        <input type="checkbox" name="tracesEnabled" value="true"%s>
-        <span class="toggle-text">Enable Traces</span>
-      </label>
-      <label class="toggle-label">
-        <input type="checkbox" name="metricsEnabled" value="true"%s>
-        <span class="toggle-text">Enable Metrics</span>
-      </label>
-    </div>
-    <div class="form-field">
-      <label for="otel-sample-rate">Trace Sample Rate</label>
-      <input type="text" id="otel-sample-rate" name="traceSampleRate" placeholder="1.0" value="%s">
-      <p class="field-hint">Value between 0.0 (no traces) and 1.0 (all traces). Applied when traces are enabled.</p>
-    </div>
-    <div class="form-field">
-      <label for="otel-headers">OTLP Headers <span class="field-optional">(optional JSON)</span></label>
-      <textarea id="otel-headers" name="headers" rows="3" placeholder='{"Authorization":"Bearer my-api-key"}'>%s</textarea>
-      <p class="field-hint">JSON object of headers sent with every OTLP request. Supports env var expansion (e.g. <code>${OTEL_AUTH_TOKEN}</code>).</p>
-    </div>
-    <div class="form-actions">
-      <button type="submit" class="btn btn-primary">Save</button>
-      <span id="otel-status"></span>
-    </div>
-  </form>
-  <div class="settings-notice settings-notice-restart">
-    <p>⚠️ Saving settings stores them in the database. You must restart the server for new OTel settings to take effect.</p>
-  </div>
-</div>`,
-		html.EscapeString(settings.Endpoint),
-		checked(settings.TracesEnabled, "true"),
-		checked(settings.MetricsEnabled, "true"),
-		html.EscapeString(settings.TraceSampleRate),
-		html.EscapeString(settings.Headers))
-}
-
-func (h *Handlers) HandleLogLevelSet(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		h.logger.Errorc(r.Context(), "Failed to read request body", "error", err.Error())
-		http.Error(w, "Bad request", http.StatusBadRequest)
-		return
-	}
-	level := strings.TrimSpace(string(body))
-	if level == "" {
-		level = r.FormValue("log_level")
-	}
-	if level == "" {
-		h.logger.Warnc(r.Context(), "Empty log level in request")
-		http.Error(w, "Missing log_level", http.StatusBadRequest)
-		return
-	}
-
-	sev := logging.ParseSeverity(level)
-	if err := h.store.SetSetting("log_level", sev.String()); err != nil {
-		h.logger.Errorc(r.Context(), "Failed to save log level", "error", err.Error())
-		http.Error(w, "Internal error", http.StatusInternalServerError)
-		return
-	}
-	h.logger.SetMinLevel(sev)
-	h.logger.Infoc(r.Context(), "Log level changed", "level", sev.String())
-
-	w.Header().Set("Content-Type", "text/html")
-	fmt.Fprintf(w, `<span class="verbosity-ok">Set to %s</span>`, sev.String())
+	adminTmpl.ExecuteTemplate(w, "otelSettings", otelSettingsData{
+		Endpoint:         settings.Endpoint,
+		TracesEnabled:    settings.TracesEnabled == "true",
+		MetricsEnabled:   settings.MetricsEnabled == "true",
+		TraceSampleRate:  settings.TraceSampleRate,
+		Headers:          settings.Headers,
+	})
 }
 
 // HandleSettingsEmail handles GET/POST for email settings.
@@ -555,35 +478,11 @@ func (h *Handlers) HandleSettingsUmamiHTML(w http.ResponseWriter, r *http.Reques
 	settings := h.loadUmamiSettings()
 
 	w.Header().Set("Content-Type", "text/html")
-	fmt.Fprintf(w, `<div class="admin-settings-umami">
-  <h3>Umami Analytics</h3>
-  <p class="settings-desc">Configure self-hosted <a href="https://umami.is" target="_blank" rel="noopener">Umami</a> analytics tracking.</p>
-  <form hx-post="/api/admin/settings/umami" hx-target="#umami-status" hx-swap="innerHTML">
-    <div class="form-field">
-      <label for="umami-url">Server URL</label>
-      <input type="url" id="umami-url" name="url" placeholder="https://analytics.example.com" value="%s">
-    </div>
-    <div class="form-field">
-      <label for="umami-website-id">Website ID</label>
-      <input type="text" id="umami-website-id" name="websiteId" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" value="%s">
-    </div>
-    <div class="form-field">
-      <label for="umami-script-url">Script URL <span class="field-optional">(optional)</span></label>
-      <input type="url" id="umami-script-url" name="scriptUrl" placeholder="https://analytics.example.com/script.js" value="%s">
-      <p class="field-hint">Defaults to &lt;Server URL&gt;/script.js if not set.</p>
-    </div>
-    <div class="form-actions">
-      <button type="submit" class="btn btn-primary">Save</button>
-      <span id="umami-status"></span>
-    </div>
-  </form>
-  <div class="settings-notice">
-    <p>After saving, the Umami tracking script will be injected into every page when both Server URL and Website ID are set.</p>
-  </div>
-</div>`,
-		html.EscapeString(settings.URL),
-		html.EscapeString(settings.WebsiteID),
-		html.EscapeString(settings.ScriptURL))
+	adminTmpl.ExecuteTemplate(w, "umamiSettings", umamiSettingsData{
+		URL:       settings.URL,
+		WebsiteID: settings.WebsiteID,
+		ScriptURL: settings.ScriptURL,
+	})
 }
 
 // gotifySettings holds the Gotify notification configuration.
@@ -665,34 +564,44 @@ func (h *Handlers) HandleSettingsGotifyHTML(w http.ResponseWriter, r *http.Reque
 	settings := h.loadGotifySettings()
 
 	w.Header().Set("Content-Type", "text/html")
-	fmt.Fprintf(w, `<div class="admin-settings-gotify">
-  <h3>Gotify Notifications</h3>
-  <p class="settings-desc">Configure push notifications via a self-hosted <a href="https://gotify.net" target="_blank" rel="noopener">Gotify</a> server. Notifications are sent when a playlist shuffle completes, fails, or pauses.</p>
-  <form hx-post="/api/admin/settings/gotify" hx-target="#gotify-status" hx-swap="innerHTML">
-    <div class="form-field">
-      <label for="gotify-url">Server URL</label>
-      <input type="url" id="gotify-url" name="url" placeholder="http://gotify:8080" value="%s">
-    </div>
-    <div class="form-field">
-      <label for="gotify-token">App Token</label>
-      <input type="password" id="gotify-token" name="token" placeholder="Gotify application token" value="%s" autocomplete="off">
-    </div>
-    <div class="form-field form-field-row">
-      <label class="toggle-label">
-        <input type="checkbox" name="enabled" value="true"%s>
-        <span class="toggle-text">Enable Notifications</span>
-      </label>
-    </div>
-    <div class="form-actions">
-      <button type="submit" class="btn btn-primary">Save</button>
-      <span id="gotify-status"></span>
-    </div>
-  </form>
-  <div class="settings-notice">
-    <p>Notifications are sent immediately on job completion, failure, or pause — no restart required.</p>
-  </div>
-</div>`,
-		html.EscapeString(settings.URL),
-		html.EscapeString(settings.Token),
-		checked(settings.Enabled, "true"))
+	adminTmpl.ExecuteTemplate(w, "gotifySettings", gotifySettingsData{
+		URL:     settings.URL,
+		Token:   settings.Token,
+		Enabled: settings.Enabled == "true",
+	})
+}
+
+func (h *Handlers) HandleLogLevelSet(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		h.logger.Errorc(r.Context(), "Failed to read request body", "error", err.Error())
+		http.Error(w, "Bad request", http.StatusBadRequest)
+		return
+	}
+	level := strings.TrimSpace(string(body))
+	if level == "" {
+		level = r.FormValue("log_level")
+	}
+	if level == "" {
+		h.logger.Warnc(r.Context(), "Empty log level in request")
+		http.Error(w, "Missing log_level", http.StatusBadRequest)
+		return
+	}
+
+	sev := logging.ParseSeverity(level)
+	if err := h.store.SetSetting("log_level", sev.String()); err != nil {
+		h.logger.Errorc(r.Context(), "Failed to save log level", "error", err.Error())
+		http.Error(w, "Internal error", http.StatusInternalServerError)
+		return
+	}
+	h.logger.SetMinLevel(sev)
+	h.logger.Infoc(r.Context(), "Log level changed", "level", sev.String())
+
+	w.Header().Set("Content-Type", "text/html")
+	adminTmpl.ExecuteTemplate(w, "verbosityStatus", verbosityData{Level: sev.String()})
 }

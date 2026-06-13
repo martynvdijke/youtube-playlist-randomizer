@@ -160,9 +160,15 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
-	// Add updated_at column if missing (existing databases)
-	s.db.Exec("ALTER TABLE jobs ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''")
-	s.db.Exec("ALTER TABLE jobs ADD COLUMN paused_at TEXT DEFAULT ''")
+	// Backward-compat: ensure columns exist in databases created before they
+	// were added to the initial schema. Silently ignore errors — the column
+	// already exists in databases created with the current schema.
+	for _, alter := range []string{
+		"ALTER TABLE jobs ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE jobs ADD COLUMN paused_at TEXT DEFAULT ''",
+	} {
+		s.db.Exec(alter) //nolint:errcheck
+	}
 	return nil
 }
 

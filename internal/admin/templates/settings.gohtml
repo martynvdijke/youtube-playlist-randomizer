@@ -1,0 +1,105 @@
+{{define "otelSettings"}}
+<div class="admin-settings-otel">
+  <h3>OpenTelemetry</h3>
+  <p class="settings-desc">Configure OTLP exporting for traces and metrics. Changes require a server restart to take effect.</p>
+  <form hx-post="/api/admin/settings/otel" hx-target="#otel-status" hx-swap="innerHTML">
+    <div class="form-field">
+      <label for="otel-endpoint">OTLP Endpoint URL</label>
+      <input type="url" id="otel-endpoint" name="endpoint" placeholder="http://otel-collector:4318" value="{{.Endpoint}}">
+      <p class="field-hint">Leave empty to disable OTLP exporting. Falls back to <code>OTEL_EXPORTER_OTLP_ENDPOINT</code> env var.</p>
+    </div>
+    <div class="form-field form-field-row">
+      <label class="toggle-label">
+        <input type="checkbox" name="tracesEnabled" value="true"{{if .TracesEnabled}} checked{{end}}>
+        <span class="toggle-text">Enable Traces</span>
+      </label>
+      <label class="toggle-label">
+        <input type="checkbox" name="metricsEnabled" value="true"{{if .MetricsEnabled}} checked{{end}}>
+        <span class="toggle-text">Enable Metrics</span>
+      </label>
+    </div>
+    <div class="form-field">
+      <label for="otel-sample-rate">Trace Sample Rate</label>
+      <input type="text" id="otel-sample-rate" name="traceSampleRate" placeholder="1.0" value="{{.TraceSampleRate}}">
+      <p class="field-hint">Value between 0.0 (no traces) and 1.0 (all traces). Applied when traces are enabled.</p>
+    </div>
+    <div class="form-field">
+      <label for="otel-headers">OTLP Headers <span class="field-optional">(optional JSON)</span></label>
+      <textarea id="otel-headers" name="headers" rows="3" placeholder='{"Authorization":"Bearer my-api-key"}'>{{.Headers}}</textarea>
+      <p class="field-hint">JSON object of headers sent with every OTLP request. Supports env var expansion (e.g. <code>${OTEL_AUTH_TOKEN}</code>).</p>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Save</button>
+      <span id="otel-status"></span>
+    </div>
+  </form>
+  <div class="settings-notice settings-notice-restart">
+    <p>⚠️ Saving settings stores them in the database. You must restart the server for new OTel settings to take effect.</p>
+  </div>
+</div>
+{{end}}
+
+{{define "umamiSettings"}}
+<div class="admin-settings-umami">
+  <h3>Umami Analytics</h3>
+  <p class="settings-desc">Configure self-hosted <a href="https://umami.is" target="_blank" rel="noopener">Umami</a> analytics tracking.</p>
+  <form hx-post="/api/admin/settings/umami" hx-target="#umami-status" hx-swap="innerHTML">
+    <div class="form-field">
+      <label for="umami-url">Server URL</label>
+      <input type="url" id="umami-url" name="url" placeholder="https://analytics.example.com" value="{{.URL}}">
+    </div>
+    <div class="form-field">
+      <label for="umami-website-id">Website ID</label>
+      <input type="text" id="umami-website-id" name="websiteId" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" value="{{.WebsiteID}}">
+    </div>
+    <div class="form-field">
+      <label for="umami-script-url">Script URL <span class="field-optional">(optional)</span></label>
+      <input type="url" id="umami-script-url" name="scriptUrl" placeholder="https://analytics.example.com/script.js" value="{{.ScriptURL}}">
+      <p class="field-hint">Defaults to &lt;Server URL&gt;/script.js if not set.</p>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Save</button>
+      <span id="umami-status"></span>
+    </div>
+  </form>
+  <div class="settings-notice">
+    <p>After saving, the Umami tracking script will be injected into every page when both Server URL and Website ID are set.</p>
+  </div>
+</div>
+{{end}}
+
+{{define "gotifySettings"}}
+<div class="admin-settings-gotify">
+  <h3>Gotify Notifications</h3>
+  <p class="settings-desc">Configure push notifications via a self-hosted <a href="https://gotify.net" target="_blank" rel="noopener">Gotify</a> server. Notifications are sent when a playlist shuffle completes, fails, or pauses.</p>
+  <form hx-post="/api/admin/settings/gotify" hx-target="#gotify-status" hx-swap="innerHTML">
+    <div class="form-field">
+      <label for="gotify-url">Server URL</label>
+      <input type="url" id="gotify-url" name="url" placeholder="http://gotify:8080" value="{{.URL}}">
+    </div>
+    <div class="form-field">
+      <label for="gotify-token">App Token</label>
+      <input type="password" id="gotify-token" name="token" placeholder="Gotify application token" value="{{.Token}}" autocomplete="off">
+    </div>
+    <div class="form-field form-field-row">
+      <label class="toggle-label">
+        <input type="checkbox" name="enabled" value="true"{{if .Enabled}} checked{{end}}>
+        <span class="toggle-text">Enable Notifications</span>
+      </label>
+    </div>
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary">Save</button>
+      <span id="gotify-status"></span>
+    </div>
+  </form>
+  <div class="settings-notice">
+    <p>Notifications are sent immediately on job completion, failure, or pause — no restart required.</p>
+  </div>
+</div>
+{{end}}
+
+{{define "verbosityStatus"}}<span class="verbosity-ok">Set to {{.Level}}</span>{{end}}
+
+{{define "errorSpan"}}<span class="error">{{.Error}}</span>{{end}}
+
+{{define "savedOk"}}<span class="restart-required">✓ Saved — restart required to apply</span>{{end}}

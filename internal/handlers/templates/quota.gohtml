@@ -1,0 +1,2 @@
+{{define "quota"}}<div class="quota-label"><span>Quota: {{.Used}} / {{.Limit}} used ({{.Remaining}} remaining)</span></div>
+<div class="quota-track"><div class="{{.FillClass}}" style="width:{{.Pct}}%"></div></div>{{end}}

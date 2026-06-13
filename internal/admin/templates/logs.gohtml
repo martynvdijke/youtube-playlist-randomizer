@@ -1,0 +1,50 @@
+{{define "logViewer"}}
+<div class="admin-log-controls">
+  <div class="log-count">Showing {{.Total}} entries ({{.CountDebug}} DEBUG, {{.CountInfo}} INFO, {{.CountWarn}} WARN, {{.CountError}} ERROR)</div>
+  <div class="log-filters">
+    <label>Severity: </label>
+    <select name="min_level" hx-get="/api/admin/logs/html" hx-trigger="change" hx-target="#admin-content" hx-swap="innerHTML" hx-include="this">
+      <option value="DEBUG"{{if eq .MinLevel "DEBUG"}} selected{{end}}>DEBUG</option>
+      <option value="INFO"{{if eq .MinLevel "INFO"}} selected{{end}}>INFO</option>
+      <option value="WARN"{{if eq .MinLevel "WARN"}} selected{{end}}>WARN</option>
+      <option value="ERROR"{{if eq .MinLevel "ERROR"}} selected{{end}}>ERROR</option>
+    </select>
+    <label>Source: </label>
+    <input type="text" name="source" placeholder="Filter by source..." value="{{.Source}}" hx-get="/api/admin/logs/html" hx-trigger="keyup changed delay:300ms" hx-target="#admin-content" hx-swap="innerHTML" hx-include="this">
+  </div>
+</div>
+<div class="admin-verbosity">
+  <label>Minimum log level: </label>
+  <select name="log_level" hx-post="/api/admin/settings/log_level" hx-trigger="change" hx-target="#verbosity-status" hx-swap="innerHTML">
+    <option value="DEBUG"{{if eq .MinLevel "DEBUG"}} selected{{end}}>DEBUG</option>
+    <option value="INFO"{{if eq .MinLevel "INFO"}} selected{{end}}>INFO</option>
+    <option value="WARN"{{if eq .MinLevel "WARN"}} selected{{end}}>WARN</option>
+    <option value="ERROR"{{if eq .MinLevel "ERROR"}} selected{{end}}>ERROR</option>
+  </select>
+  <span id="verbosity-status"></span>
+</div>
+<table class="log-table">
+  <thead>
+    <tr>
+      <th>Timestamp</th>
+      <th>Severity</th>
+      <th>Source</th>
+      <th>Message</th>
+      <th>Attributes</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{if .Entries}}{{range .Entries}}
+    <tr class="log-sev-{{.SeverityLower}}">
+      <td class="log-ts">{{.Timestamp}}</td>
+      <td class="log-sev">{{.Severity}}</td>
+      <td class="log-src">{{.Source}}</td>
+      <td class="log-msg">{{.Message}}</td>
+      <td class="log-attrs">{{.Attributes}}</td>
+    </tr>
+    {{end}}{{else}}
+    <tr><td colspan="5" class="log-empty">No log entries found.</td></tr>
+    {{end}}
+  </tbody>
+</table>
+{{end}}

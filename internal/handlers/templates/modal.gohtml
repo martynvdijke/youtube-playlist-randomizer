@@ -1,0 +1,17 @@
+{{define "modal"}}
+<div class="modal-content">
+  <h2>Randomize Playlist</h2>
+  <p>{{.Title}}</p>
+  <p class="quota-cost {{.QuotaCostClass}}">Estimated quota cost: {{.Cost}} units ({{.QuotaText}})</p>
+  {{if .WarningHTML}}{{.WarningHTML}}{{end}}
+  <form hx-post="/api/randomize/html" hx-target="#progress-modal" hx-swap="innerHTML" hx-on::after-request="showProgressModal()">
+    <input type="hidden" name="playlistId" value="{{.PlaylistID}}">
+    <label for="new-name">Name for new randomized playlist:</label>
+    <input type="text" id="new-name" name="newName" placeholder="Enter playlist name" value="{{.DefaultName}}" required>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+      <button type="submit" class="btn btn-primary">Randomize</button>
+    </div>
+  </form>
+</div>
+{{end}}
