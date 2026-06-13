@@ -1,3 +1,10 @@
+# [1.14.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.13.0...v1.14.0) (2026-06-13)
+
+
+### Features
+
+* **pwa:** add service worker for installability + static caching ([b1ae2bb](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/b1ae2bb8e5f9edd9158c9dc1299017f7bf29f152))
+
 # [1.13.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.12.0...v1.13.0) (2026-06-13)
 
 
