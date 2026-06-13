@@ -1,0 +1,16 @@
+{
+  "name": "YouTube Playlist Randomizer",
+  "short_name": "YPR",
+  "description": "Randomize your YouTube playlists with one click",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#121212",
+  "theme_color": "#1e1e1e",
+  "icons": [
+    {
+      "src": "/static/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

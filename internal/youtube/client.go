@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/logging"
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/models"
@@ -26,10 +27,55 @@ const (
 	scope         = youtube.YoutubeForceSslScope
 )
 
+type cacheEntry struct {
+	data      interface{}
+	expiresAt time.Time
+}
+
 type Client struct {
 	service *youtube.Service
 	otel    *telemetry.Telemetry
 	logger  *logging.Logger
+
+	mu    sync.RWMutex
+	cache map[string]cacheEntry
+}
+
+const (
+	cacheTTLPlaylists   = 2 * time.Minute
+	cacheTTLPlaylistItems = 30 * time.Minute
+)
+
+func (c *Client) cacheGet(key string) (interface{}, bool) {
+	c.mu.RLock()
+	e, ok := c.cache[key]
+	c.mu.RUnlock()
+	if !ok || time.Now().After(e.expiresAt) {
+		if ok {
+			c.mu.Lock()
+			delete(c.cache, key)
+			c.mu.Unlock()
+		}
+		return nil, false
+	}
+	return e.data, true
+}
+
+func (c *Client) cacheSet(key string, data interface{}, ttl time.Duration) {
+	c.mu.Lock()
+	if c.cache == nil {
+		c.cache = make(map[string]cacheEntry)
+	}
+	c.cache[key] = cacheEntry{data: data, expiresAt: time.Now().Add(ttl)}
+	c.mu.Unlock()
+}
+
+// InvalidateCache clears all cached YouTube API responses, forcing fresh
+// fetches on the next request. Call this after any write operation.
+func (c *Client) InvalidateCache() {
+	c.mu.Lock()
+	c.cache = nil
+	c.mu.Unlock()
 }
 
 type OAuthSetup struct {
@@ -146,6 +192,13 @@ func (c *Client) verifyToken(ctx context.Context) error {
 }
 
 func (c *Client) GetPlaylists(ctx context.Context) ([]models.Playlist, error) {
+	if cached, ok := c.cacheGet("playlists"); ok {
+		if c.logger != nil {
+			c.logger.Debugc(ctx, "YouTube API: cache hit for playlists")
+		}
+		return cached.([]models.Playlist), nil
+	}
+
 	var allItems []*youtube.Playlist
 	nextPageToken := ""
 
@@ -192,10 +245,19 @@ func (c *Client) GetPlaylists(ctx context.Context) ([]models.Playlist, error) {
 	if c.logger != nil {
 		c.logger.Infoc(ctx, "YouTube API: playlists fetched successfully", "count", fmt.Sprintf("%d", len(playlists)))
 	}
+	c.cacheSet("playlists", playlists, cacheTTLPlaylists)
 	return playlists, nil
 }
 
 func (c *Client) GetPlaylistItems(ctx context.Context, playlistID string) ([]models.PlayListItem, error) {
+	cacheKey := "items:" + playlistID
+	if cached, ok := c.cacheGet(cacheKey); ok {
+		if c.logger != nil {
+			c.logger.Debugc(ctx, "YouTube API: cache hit for playlist items", "playlistId", playlistID)
+		}
+		return cached.([]models.PlayListItem), nil
+	}
+
 	var allItems []*youtube.PlaylistItem
 	nextPageToken := ""
 
@@ -231,6 +293,7 @@ func (c *Client) GetPlaylistItems(ctx context.Context, playlistID string) ([]mod
 	if c.logger != nil {
 		c.logger.Infoc(ctx, "YouTube API: playlist items fetched", "playlistId", playlistID, "count", fmt.Sprintf("%d", len(items)))
 	}
+	c.cacheSet(cacheKey, items, cacheTTLPlaylistItems)
 	return items, nil
 }
 
@@ -253,6 +316,7 @@ func (c *Client) CreatePlaylist(ctx context.Context, title string) (string, erro
 	if c.logger != nil {
 		c.logger.Infoc(ctx, "YouTube API: playlist created", "title", title, "playlistId", response.Id)
 	}
+	c.InvalidateCache()
 	return response.Id, nil
 }
 
@@ -270,6 +334,7 @@ func (c *Client) DeletePlaylist(ctx context.Context, playlistID string) error {
 	if c.logger != nil {
 		c.logger.Infoc(ctx, "YouTube API: playlist deleted", "playlistId", playlistID)
 	}
+	c.InvalidateCache()
 	return nil
 }
 
@@ -297,6 +362,7 @@ func (c *Client) InsertPlaylistItem(ctx context.Context, playlistID, videoID str
 	if c.logger != nil {
 		c.logger.Debugc(ctx, "YouTube API: playlist item inserted", "playlistId", playlistID, "videoId", videoID)
 	}
+	c.InvalidateCache()
 	return nil
 }
 

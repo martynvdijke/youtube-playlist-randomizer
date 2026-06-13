@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/oauth2"
 	"google.golang.org/api/googleapi"
@@ -325,6 +326,86 @@ func TestSaveToken_CreatesFile(t *testing.T) {
 	if !strings.Contains(string(data), "new-token") {
 		t.Errorf("expected token content, got %s", string(data))
 	}
+}
+
+func TestCacheGet_Missing(t *testing.T) {
+	c := &Client{}
+	got, ok := c.cacheGet("nonexistent")
+	if ok {
+		t.Fatal("expected cache miss")
+	}
+	if got != nil {
+		t.Fatalf("expected nil data, got %v", got)
+	}
+}
+
+func TestCacheSetAndGet(t *testing.T) {
+	c := &Client{}
+	data := []string{"a", "b", "c"}
+	c.cacheSet("test-key", data, 5*time.Minute)
+
+	got, ok := c.cacheGet("test-key")
+	if !ok {
+		t.Fatal("expected cache hit")
+	}
+	result, ok := got.([]string)
+	if !ok {
+		t.Fatalf("expected []string, got %T", got)
+	}
+	if len(result) != 3 || result[0] != "a" {
+		t.Errorf("unexpected cached data: %v", result)
+	}
+}
+
+func TestCacheExpiry(t *testing.T) {
+	c := &Client{}
+	c.cacheSet("expire-key", "value", 1*time.Millisecond)
+	time.Sleep(5 * time.Millisecond)
+
+	_, ok := c.cacheGet("expire-key")
+	if ok {
+		t.Fatal("expected cache miss after expiry")
+	}
+}
+
+func TestInvalidateCache(t *testing.T) {
+	c := &Client{}
+	c.cacheSet("k1", "v1", 5*time.Minute)
+	c.cacheSet("k2", "v2", 5*time.Minute)
+
+	c.InvalidateCache()
+
+	_, ok := c.cacheGet("k1")
+	if ok {
+		t.Fatal("expected cache miss after invalidation")
+	}
+	_, ok = c.cacheGet("k2")
+	if ok {
+		t.Fatal("expected cache miss after invalidation")
+	}
+}
+
+func TestCacheConcurrentAccess(t *testing.T) {
+	c := &Client{}
+	done := make(chan struct{})
+	go func() {
+		for i := 0; i < 100; i++ {
+			c.cacheSet("key", "value", 5*time.Minute)
+			c.cacheGet("key")
+			c.InvalidateCache()
+		}
+		done <- struct{}{}
+	}()
+	go func() {
+		for i := 0; i < 100; i++ {
+			c.cacheGet("key")
+			c.InvalidateCache()
+			c.cacheSet("key", "value", 5*time.Minute)
+		}
+		done <- struct{}{}
+	}()
+	<-done
+	<-done
 }
 
 func TestTokenFromFile_Corrupted(t *testing.T) {
