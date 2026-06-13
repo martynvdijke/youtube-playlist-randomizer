@@ -100,6 +100,9 @@ func (h *Handlers) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/jobs/", h.handleJobStatus)
 	mux.HandleFunc("/api/jobs/resume", h.handleForceResume)
 	mux.HandleFunc("/api/jobs/undo", h.handleUndo)
+	mux.HandleFunc("/api/jobs/archive", h.handleArchiveJob)
+	mux.HandleFunc("/api/jobs/delete", h.handleDeleteJob)
+	mux.HandleFunc("/api/jobs/archived/html", h.handleArchivedJobsHTML)
 	mux.HandleFunc("/api/jobs/queue/html", h.handleJobQueueHTML)
 	mux.HandleFunc("/callback", h.handleOAuthCallback)
 	mux.HandleFunc("/api/auth", h.handleAuth)
@@ -238,6 +241,17 @@ type (
 		Created     string
 		ActionHTML  template.HTML
 		UndoHTML    template.HTML
+		ArchiveHTML template.HTML
+	}
+
+	ArchivedJobRowData struct {
+		ID        string
+		Status    string
+		Title     string
+		NewName   string
+		Progress  string
+		Created   string
+		DeleteURL string
 	}
 )
 

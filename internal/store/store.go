@@ -93,6 +93,7 @@ type Job struct {
 	CreatedAt         string   `json:"createdAt"`
 	UpdatedAt         string   `json:"updatedAt"`
 	PausedAt          string   `json:"pausedAt,omitempty"`
+	Archived          bool     `json:"archived"`
 }
 
 func Open(path string) (*Store, error) {
@@ -168,6 +169,7 @@ func (s *Store) migrate() error {
 		"ALTER TABLE jobs ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''",
 		"ALTER TABLE jobs ADD COLUMN paused_at TEXT DEFAULT ''",
 		"ALTER TABLE jobs ADD COLUMN source_playlist_ids TEXT DEFAULT ''",
+		"ALTER TABLE jobs ADD COLUMN archived INTEGER NOT NULL DEFAULT 0",
 	} {
 		s.db.Exec(alter) //nolint:errcheck
 	}
@@ -359,13 +361,15 @@ func scanJob(scanner interface {
 }) (*Job, error) {
 	j := &Job{}
 	var idsStr string
+	var archived int
 	err := scanner.Scan(&j.ID, &j.SourcePlaylistID, &j.SourceTitle, &j.NewName,
 		&j.NewPlaylistID, &j.Status, &j.TotalItems, &j.InsertedItems,
-		&j.Error, &j.CreatedAt, &j.UpdatedAt, &j.PausedAt, &idsStr)
+		&j.Error, &j.CreatedAt, &j.UpdatedAt, &j.PausedAt, &idsStr, &archived)
 	if err != nil {
 		return nil, err
 	}
 	j.SourcePlaylistIDs = parseIDs(idsStr, j.SourcePlaylistID)
+	j.Archived = archived == 1
 	return j, nil
 }
 
@@ -393,7 +397,7 @@ func parseIDs(idsStr, fallback string) []string {
 const jobColumns = `id, source_playlist_id, source_title, new_name,
 	COALESCE(new_playlist_id,''), status, total_items, inserted_items,
 	COALESCE(error,''), created_at, COALESCE(updated_at,''), COALESCE(paused_at,''),
-	COALESCE(source_playlist_ids,'')`
+	COALESCE(source_playlist_ids,''), archived`
 
 func (s *Store) GetJob(id string) (*Job, error) {
 	row := s.db.QueryRow(`SELECT `+jobColumns+` FROM jobs WHERE id = ?`, id)
@@ -451,7 +455,7 @@ func (s *Store) GetAllJobs(limit int) ([]Job, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 50
 	}
-	rows, err := s.db.Query(`SELECT `+jobColumns+` FROM jobs ORDER BY created_at DESC LIMIT ?`, limit)
+	rows, err := s.db.Query(`SELECT `+jobColumns+` FROM jobs WHERE archived = 0 ORDER BY created_at DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -465,6 +469,31 @@ func (s *Store) GetAllJobs(limit int) ([]Job, error) {
 		jobs = append(jobs, *j)
 	}
 	return jobs, rows.Err()
+}
+
+func (s *Store) GetArchivedJobs(limit int) ([]Job, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	rows, err := s.db.Query(`SELECT `+jobColumns+` FROM jobs WHERE archived = 1 ORDER BY created_at DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var jobs []Job
+	for rows.Next() {
+		j, err := scanJob(rows)
+		if err != nil {
+			return nil, err
+		}
+		jobs = append(jobs, *j)
+	}
+	return jobs, rows.Err()
+}
+
+func (s *Store) ArchiveJob(id string) error {
+	_, err := s.db.Exec("UPDATE jobs SET archived = 1, updated_at = ? WHERE id = ?", nowRFC3339(), id)
+	return err
 }
 
 func (s *Store) InsertLog(entry LogEntry) error {

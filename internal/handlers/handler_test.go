@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/job"
+	"github.com/martynvdijke/youtube-playlist-randomizer/internal/logging"
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/store"
 )
 
@@ -329,6 +330,173 @@ func TestHandleJobQueueHTML_EmptyQueue(t *testing.T) {
 	}
 }
 
+func TestHandleArchiveJob_BadMethod(t *testing.T) {
+	h := &Handlers{}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/jobs/archive", nil)
+	h.handleArchiveJob(rr, req)
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", rr.Code)
+	}
+}
+
+func TestHandleArchiveJob_MissingJobID(t *testing.T) {
+	h := &Handlers{}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/jobs/archive", nil)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	h.handleArchiveJob(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "Missing") {
+		t.Errorf("expected 'Missing job ID', got %s", rr.Body.String())
+	}
+}
+
+func TestHandleArchiveJob_Success(t *testing.T) {
+	s, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer s.Close()
+
+	if err := s.CreateJob("test-job-archive", "PL_SRC", "Title", "Name"); err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+
+	h := &Handlers{store: s, logger: logging.New(logging.LogOptions{MinLevel: logging.ERROR})}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/jobs/archive", strings.NewReader("jobId=test-job-archive"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	h.handleArchiveJob(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// Verify archived
+	j, err := s.GetJob("test-job-archive")
+	if err != nil {
+		t.Fatalf("GetJob: %v", err)
+	}
+	if !j.Archived {
+		t.Error("expected job to be archived")
+	}
+}
+
+func TestHandleDeleteJob_BadMethod(t *testing.T) {
+	h := &Handlers{}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/jobs/delete", nil)
+	h.handleDeleteJob(rr, req)
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", rr.Code)
+	}
+}
+
+func TestHandleDeleteJob_MissingJobID(t *testing.T) {
+	h := &Handlers{}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/jobs/delete", nil)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	h.handleDeleteJob(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "Missing") {
+		t.Errorf("expected 'Missing job ID', got %s", rr.Body.String())
+	}
+}
+
+func TestHandleDeleteJob_Success(t *testing.T) {
+	s, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer s.Close()
+
+	if err := s.CreateJob("test-job-delete", "PL_SRC", "Title", "Name"); err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+
+	h := &Handlers{store: s, logger: logging.New(logging.LogOptions{MinLevel: logging.ERROR})}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/jobs/delete", strings.NewReader("jobId=test-job-delete"))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	h.handleDeleteJob(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	// Verify deleted
+	_, err = s.GetJob("test-job-delete")
+	if err == nil {
+		t.Error("expected job to be deleted")
+	}
+}
+
+func TestHandleArchivedJobsHTML_BadMethod(t *testing.T) {
+	h := &Handlers{}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/jobs/archived/html", nil)
+	h.handleArchivedJobsHTML(rr, req)
+	if rr.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", rr.Code)
+	}
+}
+
+func TestHandleArchivedJobsHTML_Empty(t *testing.T) {
+	s, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer s.Close()
+
+	h := &Handlers{store: s}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/jobs/archived/html", nil)
+	h.handleArchivedJobsHTML(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rr.Code)
+	}
+	if !strings.Contains(rr.Body.String(), "No archived jobs") {
+		t.Errorf("expected 'No archived jobs', got: %s", rr.Body.String())
+	}
+}
+
+func TestHandleArchivedJobsHTML_WithJobs(t *testing.T) {
+	s, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer s.Close()
+
+	if err := s.CreateJob("job1", "PL_SRC", "Title", "Name"); err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+	if err := s.ArchiveJob("job1"); err != nil {
+		t.Fatalf("archive job: %v", err)
+	}
+
+	h := &Handlers{store: s}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/jobs/archived/html", nil)
+	h.handleArchivedJobsHTML(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "Archived Jobs") {
+		t.Errorf("expected 'Archived Jobs' in body, got: %s", body)
+	}
+	if !strings.Contains(body, "Delete") {
+		t.Errorf("expected Delete button in body, got: %s", body)
+	}
+	if !strings.Contains(body, `hx-post="/api/jobs/delete"`) {
+		t.Errorf("expected delete post endpoint, got: %s", body)
+	}
+}
+
 func TestHandleJobQueueHTML_WithPausedJob(t *testing.T) {
 	s, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
 	if err != nil {
@@ -367,6 +535,121 @@ func TestHandleJobQueueHTML_WithPausedJob(t *testing.T) {
 	}
 	if !strings.Contains(body, "Source Title") {
 		t.Errorf("expected source title in response, got: %s", body)
+	}
+}
+
+func TestHandleJobQueueHTML_WithDoneJob_ShowsArchive(t *testing.T) {
+	s, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer s.Close()
+
+	if err := s.CreateJob("done-job", "PL_SRC", "Done Title", "Done Name"); err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+	if err := s.SetJobDone("done-job"); err != nil {
+		t.Fatalf("set done: %v", err)
+	}
+
+	h := &Handlers{store: s}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/jobs/queue/html", nil)
+	h.handleJobQueueHTML(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rr.Code)
+	}
+	body := rr.Body.String()
+	if !strings.Contains(body, "Archive") {
+		t.Errorf("expected Archive button in response for done job, got: %s", body)
+	}
+	if !strings.Contains(body, `hx-post="/api/jobs/archive"`) {
+		t.Errorf("expected hx-post to /api/jobs/archive, got: %s", body)
+	}
+}
+
+func TestHandleJobQueueHTML_WithDoneJob_HasNewPlaylistID_ShowsUndo(t *testing.T) {
+	s, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer s.Close()
+
+	if err := s.CreateJob("done-job-undo", "PL_SRC", "Undo Title", "Undo Name"); err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+	if err := s.UpdateJobProgress("done-job-undo", 10, "new-pl-id"); err != nil {
+		t.Fatalf("update progress: %v", err)
+	}
+	if err := s.SetJobDone("done-job-undo"); err != nil {
+		t.Fatalf("set done: %v", err)
+	}
+
+	h := &Handlers{store: s}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/jobs/queue/html", nil)
+	h.handleJobQueueHTML(rr, req)
+
+	body := rr.Body.String()
+	if !strings.Contains(body, "Undo") {
+		t.Errorf("expected Undo button for done job with playlist, got: %s", body)
+	}
+	if !strings.Contains(body, "Archive") {
+		t.Errorf("expected Archive button alongside Undo, got: %s", body)
+	}
+}
+
+func TestHandleJobQueueHTML_WithErrorJob_ShowsArchive(t *testing.T) {
+	s, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer s.Close()
+
+	if err := s.CreateJob("err-job", "PL_SRC", "Err Title", "Err Name"); err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+	if err := s.SetJobError("err-job", "something broke"); err != nil {
+		t.Fatalf("set error: %v", err)
+	}
+
+	h := &Handlers{store: s}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/jobs/queue/html", nil)
+	h.handleJobQueueHTML(rr, req)
+
+	body := rr.Body.String()
+	if !strings.Contains(body, "Error") {
+		t.Errorf("expected Error status, got: %s", body)
+	}
+	if !strings.Contains(body, "Archive") {
+		t.Errorf("expected Archive button for error job, got: %s", body)
+	}
+}
+
+func TestHandleJobQueueHTML_WithArchivedJob_Excluded(t *testing.T) {
+	s, err := store.Open(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer s.Close()
+
+	if err := s.CreateJob("archived-job", "PL_SRC", "Archived", "Name"); err != nil {
+		t.Fatalf("create job: %v", err)
+	}
+	if err := s.ArchiveJob("archived-job"); err != nil {
+		t.Fatalf("archive job: %v", err)
+	}
+
+	h := &Handlers{store: s}
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("GET", "/api/jobs/queue/html", nil)
+	h.handleJobQueueHTML(rr, req)
+
+	body := rr.Body.String()
+	if strings.Contains(body, "Archived") {
+		t.Errorf("expected archived job to be excluded from queue, got: %s", body)
 	}
 }
 

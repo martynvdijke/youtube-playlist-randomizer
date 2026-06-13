@@ -83,7 +83,7 @@
   <h3>Job Queue</h3>
   <div class="job-table-wrapper">
     <table class="job-table">
-      <thead><tr><th>Status</th><th>Playlist</th><th>New Name</th><th>Progress</th><th>Created</th><th>Action</th><th>Undo</th></tr></thead>
+      <thead><tr><th>Status</th><th>Playlist</th><th>New Name</th><th>Progress</th><th>Created</th><th>Action</th><th>Undo</th><th>Archive</th></tr></thead>
       <tbody>
         {{range .}}
         <tr>
@@ -94,6 +94,42 @@
           <td>{{.Created}}</td>
           <td>{{if .ActionHTML}}{{.ActionHTML}}{{end}}</td>
           <td>{{if .UndoHTML}}{{.UndoHTML}}{{end}}</td>
+          <td>{{if .ArchiveHTML}}{{.ArchiveHTML}}{{end}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  <div style="margin-top: 8px; text-align: right;">
+    <button class="btn btn-ghost btn-sm" hx-get="/api/jobs/archived/html" hx-target="#archived-jobs" hx-swap="innerHTML">View Archived</button>
+  </div>
+  <div id="archived-jobs" style="margin-top: 8px;"></div>
+</div>
+{{end}}
+
+{{define "noArchivedJobs"}}
+<div id="archived-jobs-list" class="fade-in">
+  <p style="color:#888; font-size:0.9em;">No archived jobs.</p>
+</div>
+{{end}}
+
+{{define "archivedJobs"}}
+<div id="archived-jobs-list" class="fade-in">
+  <h4>Archived Jobs</h4>
+  <div class="job-table-wrapper">
+    <table class="job-table">
+      <thead><tr><th>Status</th><th>Playlist</th><th>New Name</th><th>Progress</th><th>Created</th><th>Delete</th></tr></thead>
+      <tbody>
+        {{range .}}
+        <tr>
+          <td class="status-{{.Status}}">{{.Status}}</td>
+          <td title="{{.Title}}">{{.Title}}</td>
+          <td title="{{.NewName}}">{{.NewName}}</td>
+          <td>{{.Progress}}</td>
+          <td>{{.Created}}</td>
+          <td>
+            <button class="btn btn-danger btn-sm" hx-post="/api/jobs/delete" hx-vals='{"jobId":"{{.ID}}"' hx-target="closest tr" hx-swap="outerHTML" hx-confirm="Permanently delete this archived job?">Delete</button>
+          </td>
         </tr>
         {{end}}
       </tbody>

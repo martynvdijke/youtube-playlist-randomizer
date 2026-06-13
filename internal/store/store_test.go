@@ -660,6 +660,115 @@ func TestGetJob_AllFields(t *testing.T) {
 	}
 }
 
+func TestArchiveJob(t *testing.T) {
+	s := newTestStore(t)
+	s.CreateJob("job1", "pl1", "", "test")
+
+	if err := s.ArchiveJob("job1"); err != nil {
+		t.Fatalf("ArchiveJob failed: %v", err)
+	}
+
+	j, _ := s.GetJob("job1")
+	if !j.Archived {
+		t.Error("expected job to be archived")
+	}
+
+	// Archived job should not appear in GetAllJobs
+	jobs, err := s.GetAllJobs(50)
+	if err != nil {
+		t.Fatalf("GetAllJobs failed: %v", err)
+	}
+	for _, jj := range jobs {
+		if jj.ID == "job1" {
+			t.Error("expected archived job to be excluded from GetAllJobs")
+		}
+	}
+}
+
+func TestGetArchivedJobs(t *testing.T) {
+	s := newTestStore(t)
+	s.CreateJob("job1", "pl1", "", "test1")
+	s.CreateJob("job2", "pl2", "", "test2")
+	s.SetJobDone("job1")
+	s.SetJobDone("job2")
+	s.ArchiveJob("job1")
+
+	archived, err := s.GetArchivedJobs(50)
+	if err != nil {
+		t.Fatalf("GetArchivedJobs failed: %v", err)
+	}
+	if len(archived) != 1 {
+		t.Fatalf("expected 1 archived job, got %d", len(archived))
+	}
+	if archived[0].ID != "job1" {
+		t.Errorf("expected archived job 'job1', got '%s'", archived[0].ID)
+	}
+	if !archived[0].Archived {
+		t.Error("expected archived job to have Archived=true")
+	}
+}
+
+func TestGetArchivedJobs_Empty(t *testing.T) {
+	s := newTestStore(t)
+	jobs, err := s.GetArchivedJobs(50)
+	if err != nil {
+		t.Fatalf("GetArchivedJobs failed: %v", err)
+	}
+	if len(jobs) != 0 {
+		t.Errorf("expected 0 archived jobs, got %d", len(jobs))
+	}
+}
+
+func TestDeleteJob(t *testing.T) {
+	s := newTestStore(t)
+	s.CreateJob("job1", "pl1", "", "test")
+	s.SaveShuffledItems("job1", []string{"vid1", "vid2"})
+
+	if err := s.DeleteJob("job1"); err != nil {
+		t.Fatalf("DeleteJob failed: %v", err)
+	}
+
+	// Job should not exist
+	_, err := s.GetJob("job1")
+	if err == nil {
+		t.Error("expected error for deleted job")
+	}
+
+	// Items should also be deleted
+	items, err := s.GetUninsertedItems("job1")
+	if err != nil {
+		t.Fatalf("GetUninsertedItems failed: %v", err)
+	}
+	if len(items) != 0 {
+		t.Errorf("expected 0 items for deleted job, got %d", len(items))
+	}
+}
+
+func TestDeleteArchivedJob(t *testing.T) {
+	s := newTestStore(t)
+	s.CreateJob("job1", "pl1", "", "test")
+	s.ArchiveJob("job1")
+
+	// Delete archived job
+	if err := s.DeleteJob("job1"); err != nil {
+		t.Fatalf("DeleteJob failed: %v", err)
+	}
+
+	// Should not appear in either list
+	all, _ := s.GetAllJobs(50)
+	for _, j := range all {
+		if j.ID == "job1" {
+			t.Error("deleted job should not appear in GetAllJobs")
+		}
+	}
+	archived, _ := s.GetArchivedJobs(50)
+	for _, j := range archived {
+		if j.ID == "job1" {
+			t.Error("deleted job should not appear in GetArchivedJobs")
+		}
+	}
+}
+
 func TestSetJobUndone_RoundTrip(t *testing.T) {
 	s := newTestStore(t)
 	s.CreateJob("job1", "pl1", "", "test")

@@ -125,24 +125,33 @@ func (h *Handlers) handleJobQueueHTML(w http.ResponseWriter, r *http.Request) {
 
 		var actionHTML template.HTML
 		var undoHTML template.HTML
+		var archiveHTML template.HTML
+		vals := template.HTML(fmt.Sprintf(`hx-vals='{"jobId":%q}'`, j.ID))
 		switch j.Status {
 		case "paused", "pending", "fetching", "shuffling", "inserting":
-			vals := template.HTML(fmt.Sprintf(`hx-vals='{"jobId":%q}'`, j.ID))
 			actionHTML = template.HTML(fmt.Sprintf(
 				`<button class="btn btn-warning btn-sm" hx-post="/api/jobs/resume" %s hx-target="closest tr" hx-swap="outerHTML" hx-confirm="Resume this job now?">Resume Now</button>`,
 				vals))
 		case "done":
 			actionHTML = `<span class="status-done">Done</span>`
 			if j.NewPlaylistID != "" {
-				vals := template.HTML(fmt.Sprintf(`hx-vals='{"jobId":%q}'`, j.ID))
 				undoHTML = template.HTML(fmt.Sprintf(
 					`<button class="btn btn-danger btn-sm" hx-post="/api/jobs/undo" %s hx-confirm="Delete the created playlist and undo this randomization?" hx-target="#undo-result" hx-swap="innerHTML">Undo</button>`,
 					vals))
 			}
+			archiveHTML = template.HTML(fmt.Sprintf(
+				`<button class="btn btn-ghost btn-sm" hx-post="/api/jobs/archive" %s hx-target="closest tr" hx-swap="outerHTML" hx-confirm="Archive this job?">Archive</button>`,
+				vals))
 		case "error":
 			actionHTML = `<span class="status-error">Error</span>`
+			archiveHTML = template.HTML(fmt.Sprintf(
+				`<button class="btn btn-ghost btn-sm" hx-post="/api/jobs/archive" %s hx-target="closest tr" hx-swap="outerHTML" hx-confirm="Archive this job?">Archive</button>`,
+				vals))
 		case "undone":
 			actionHTML = `<span class="status-undone">Undone</span>`
+			archiveHTML = template.HTML(fmt.Sprintf(
+				`<button class="btn btn-ghost btn-sm" hx-post="/api/jobs/archive" %s hx-target="closest tr" hx-swap="outerHTML" hx-confirm="Archive this job?">Archive</button>`,
+				vals))
 		}
 
 		rows = append(rows, JobQueueRowData{
@@ -154,6 +163,7 @@ func (h *Handlers) handleJobQueueHTML(w http.ResponseWriter, r *http.Request) {
 			Created:     created,
 			ActionHTML:  actionHTML,
 			UndoHTML:    undoHTML,
+			ArchiveHTML: archiveHTML,
 		})
 	}
 
@@ -216,6 +226,113 @@ func (h *Handlers) handleUndo(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("HX-Refresh", "true")
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprint(w, "<div class='undo-success'>Playlist deleted. <button class='btn' hx-get='/api/jobs/queue/html' hx-target='#job-queue' hx-swap='innerHTML'>Refresh</button></div>")
+}
+
+func (h *Handlers) handleArchiveJob(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	jobID := r.FormValue("jobId")
+	if jobID == "" {
+		jobID = r.URL.Query().Get("jobId")
+	}
+	if jobID == "" {
+		writeError(w, http.StatusBadRequest, "Missing job ID")
+		return
+	}
+
+	if err := h.store.ArchiveJob(jobID); err != nil {
+		h.logger.Errorc(r.Context(), "failed to archive job", "jobId", jobID, "error", err.Error())
+		writeError(w, http.StatusInternalServerError, "Failed to archive job")
+		return
+	}
+
+	h.logger.Infoc(r.Context(), "Job archived", "jobId", jobID)
+
+	// Return an empty response to trigger HTMX removal of the row
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprint(w, `<tr id="archived-`+jobID+`" hx-swap-oob="true"></tr>`)
+}
+
+func (h *Handlers) handleDeleteJob(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+
+	jobID := r.FormValue("jobId")
+	if jobID == "" {
+		jobID = r.URL.Query().Get("jobId")
+	}
+	if jobID == "" {
+		writeError(w, http.StatusBadRequest, "Missing job ID")
+		return
+	}
+
+	if err := h.store.DeleteJob(jobID); err != nil {
+		h.logger.Errorc(r.Context(), "failed to delete job", "jobId", jobID, "error", err.Error())
+		writeError(w, http.StatusInternalServerError, "Failed to delete job")
+		return
+	}
+
+	h.logger.Infoc(r.Context(), "Job deleted", "jobId", jobID)
+
+	// Return success — HTMX removes the row
+	w.Header().Set("Content-Type", "text/html")
+	w.WriteHeader(http.StatusOK)
+	fmt.Fprint(w, `<tr id="deleted-`+jobID+`" hx-swap-oob="true"></tr>`)
+}
+
+func (h *Handlers) handleArchivedJobsHTML(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	jobs, err := h.store.GetArchivedJobs(50)
+	if err != nil {
+		http.Error(w, "Internal error", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html")
+	if len(jobs) == 0 {
+		tmpl.ExecuteTemplate(w, "noArchivedJobs", nil)
+		return
+	}
+
+	rows := make([]ArchivedJobRowData, 0, len(jobs))
+	for _, j := range jobs {
+		label := j.SourceTitle
+		if label == "" {
+			label = j.SourcePlaylistID
+		}
+
+		progress := "-"
+		if j.TotalItems > 0 {
+			progress = fmt.Sprintf("%d / %d", j.InsertedItems, j.TotalItems)
+		}
+
+		created := j.CreatedAt
+		if len(created) > 19 {
+			created = created[:19]
+		}
+		created = strings.Replace(created, "T", " ", 1)
+
+		rows = append(rows, ArchivedJobRowData{
+			ID:       j.ID,
+			Status:   j.Status,
+			Title:    label,
+			NewName:  j.NewName,
+			Progress: progress,
+			Created:  created,
+		})
+	}
+
+	tmpl.ExecuteTemplate(w, "archivedJobs", rows)
 }
 
 // writeJobProgressHTML renders the job progress modal content based on status.
