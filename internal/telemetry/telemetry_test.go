@@ -38,7 +38,7 @@ func TestNewValidatesAllInstruments(t *testing.T) {
 
 	instruments := []struct {
 		name string
-		val  interface{}
+		val  any
 	}{
 		{"HTTPRequestCount", tel.HTTPRequestCount},
 		{"HTTPRequestDur", tel.HTTPRequestDur},

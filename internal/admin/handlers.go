@@ -23,14 +23,14 @@ var adminTmpl = template.Must(template.New("").ParseFS(templateFS, "templates/*.
 // Template data types.
 type (
 	logViewerData struct {
-		Total       int
-		CountDebug  int
-		CountInfo   int
-		CountWarn   int
-		CountError  int
-		MinLevel    string
-		Source      string
-		Entries     []logEntryData
+		Total      int
+		CountDebug int
+		CountInfo  int
+		CountWarn  int
+		CountError int
+		MinLevel   string
+		Source     string
+		Entries    []logEntryData
 	}
 
 	logEntryData struct {
@@ -43,11 +43,11 @@ type (
 	}
 
 	otelSettingsData struct {
-		Endpoint         string
-		TracesEnabled    bool
-		MetricsEnabled   bool
-		TraceSampleRate  string
-		Headers          string
+		Endpoint        string
+		TracesEnabled   bool
+		MetricsEnabled  bool
+		TraceSampleRate string
+		Headers         string
 	}
 
 	umamiSettingsData struct {
@@ -292,11 +292,11 @@ func (h *Handlers) HandleSettingsOTelHTML(w http.ResponseWriter, r *http.Request
 
 	w.Header().Set("Content-Type", "text/html")
 	adminTmpl.ExecuteTemplate(w, "otelSettings", otelSettingsData{
-		Endpoint:         settings.Endpoint,
-		TracesEnabled:    settings.TracesEnabled == "true",
-		MetricsEnabled:   settings.MetricsEnabled == "true",
-		TraceSampleRate:  settings.TraceSampleRate,
-		Headers:          settings.Headers,
+		Endpoint:        settings.Endpoint,
+		TracesEnabled:   settings.TracesEnabled == "true",
+		MetricsEnabled:  settings.MetricsEnabled == "true",
+		TraceSampleRate: settings.TraceSampleRate,
+		Headers:         settings.Headers,
 	})
 }
 
@@ -328,7 +328,7 @@ func (h *Handlers) HandleSettingsEmail(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprint(w, `{"error":"empty body"}`)
 			return
 		}
-		var dummy interface{}
+		var dummy any
 		if err := json.Unmarshal(body, &dummy); err != nil {
 			h.logger.Errorc(r.Context(), "Failed to update email settings", "reason", "invalid JSON")
 			w.Header().Set("Content-Type", "application/json")
@@ -380,7 +380,7 @@ func (h *Handlers) HandleSettingsAI(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprint(w, `{"error":"empty body"}`)
 			return
 		}
-		var dummy interface{}
+		var dummy any
 		if err := json.Unmarshal(body, &dummy); err != nil {
 			h.logger.Errorc(r.Context(), "Failed to update AI settings", "reason", "invalid JSON")
 			w.Header().Set("Content-Type", "application/json")

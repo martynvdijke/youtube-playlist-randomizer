@@ -389,7 +389,7 @@ func TestCacheConcurrentAccess(t *testing.T) {
 	c := &Client{}
 	done := make(chan struct{})
 	go func() {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			c.cacheSet("key", "value", 5*time.Minute)
 			c.cacheGet("key")
 			c.InvalidateCache()
@@ -397,7 +397,7 @@ func TestCacheConcurrentAccess(t *testing.T) {
 		done <- struct{}{}
 	}()
 	go func() {
-		for i := 0; i < 100; i++ {
+		for range 100 {
 			c.cacheGet("key")
 			c.InvalidateCache()
 			c.cacheSet("key", "value", 5*time.Minute)

@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	DefaultQuotaLimit   = 10000
+	DefaultQuotaLimit    = 10000
 	QuotaSafetyMarginPct = 5
 
 	QuotaListPlaylists     = 1
@@ -19,14 +19,8 @@ const (
 )
 
 func UsableLimit(limit int) int {
-	margin := limit * QuotaSafetyMarginPct / 100
-	if margin < 1 {
-		margin = 1
-	}
-	usable := limit - margin
-	if usable < 0 {
-		usable = 0
-	}
+	margin := max(limit*QuotaSafetyMarginPct/100, 1)
+	usable := max(limit-margin, 0)
 	return usable
 }
 
@@ -193,10 +187,7 @@ func (s *Store) GetQuota() (*QuotaInfo, error) {
 	} else if err != nil {
 		return nil, err
 	}
-	remaining := UsableLimit(limit) - used
-	if remaining < 0 {
-		remaining = 0
-	}
+	remaining := max(UsableLimit(limit)-used, 0)
 	return &QuotaInfo{Date: key, Used: used, Limit: limit, Remaining: remaining}, nil
 }
 
@@ -317,16 +308,25 @@ func (s *Store) SaveShuffledItems(jobID string, items []string) error {
 	return tx.Commit()
 }
 
-func (s *Store) GetUninsertedItems(jobID string) ([]struct{ VideoID string; Position int }, error) {
+func (s *Store) GetUninsertedItems(jobID string) ([]struct {
+	VideoID  string
+	Position int
+}, error) {
 	rows, err := s.db.Query("SELECT video_id, position FROM job_items WHERE job_id = ? AND inserted = 0 ORDER BY position", jobID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var items []struct{ VideoID string; Position int }
+	var items []struct {
+		VideoID  string
+		Position int
+	}
 	for rows.Next() {
-		var item struct{ VideoID string; Position int }
+		var item struct {
+			VideoID  string
+			Position int
+		}
 		if err := rows.Scan(&item.VideoID, &item.Position); err != nil {
 			return nil, err
 		}
@@ -340,7 +340,10 @@ func (s *Store) MarkItemInserted(jobID string, position int) error {
 	return err
 }
 
-func (s *Store) ResumeJob(id, newPlaylistID string) ([]struct{ VideoID string; Position int }, error) {
+func (s *Store) ResumeJob(id, newPlaylistID string) ([]struct {
+	VideoID  string
+	Position int
+}, error) {
 	items, err := s.GetUninsertedItems(id)
 	if err != nil {
 		return nil, err
@@ -357,7 +360,7 @@ func (s *Store) ResumeJob(id, newPlaylistID string) ([]struct{ VideoID string; P
 }
 
 func scanJob(scanner interface {
-	Scan(dest ...interface{}) error
+	Scan(dest ...any) error
 }) (*Job, error) {
 	j := &Job{}
 	var idsStr string
@@ -405,7 +408,7 @@ func (s *Store) GetJob(id string) (*Job, error) {
 }
 
 func (s *Store) GetPendingJobs() ([]Job, error) {
-	rows, err := s.db.Query(`SELECT `+jobColumns+` FROM jobs WHERE status IN ('pending','paused','fetching','shuffling','inserting')
+	rows, err := s.db.Query(`SELECT ` + jobColumns + ` FROM jobs WHERE status IN ('pending','paused','fetching','shuffling','inserting')
 		ORDER BY created_at`)
 	if err != nil {
 		return nil, err
@@ -424,7 +427,7 @@ func (s *Store) GetPendingJobs() ([]Job, error) {
 }
 
 func (s *Store) GetLatestJob() (*Job, error) {
-	row := s.db.QueryRow(`SELECT `+jobColumns+` FROM jobs ORDER BY created_at DESC LIMIT 1`)
+	row := s.db.QueryRow(`SELECT ` + jobColumns + ` FROM jobs ORDER BY created_at DESC LIMIT 1`)
 	j, err := scanJob(row)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -435,7 +438,7 @@ func (s *Store) GetLatestJob() (*Job, error) {
 }
 
 func (s *Store) GetDoneJobs() ([]Job, error) {
-	rows, err := s.db.Query(`SELECT `+jobColumns+` FROM jobs WHERE status = 'done' ORDER BY created_at DESC`)
+	rows, err := s.db.Query(`SELECT ` + jobColumns + ` FROM jobs WHERE status = 'done' ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -508,7 +511,7 @@ func (s *Store) GetLogs(minLevel string, sourceFilter string, limit, offset int)
 
 	query := `SELECT id, timestamp, severity, source, message, COALESCE(attributes,''), created_at FROM logs
 		WHERE CASE severity WHEN 'ERROR' THEN 3 WHEN 'WARN' THEN 2 WHEN 'INFO' THEN 1 WHEN 'DEBUG' THEN 0 ELSE 0 END >= ?`
-	args := []interface{}{minN}
+	args := []any{minN}
 
 	if sourceFilter != "" {
 		query += ` AND source LIKE '%' || ? || '%'`

@@ -19,7 +19,7 @@ func (h *Handlers) handlePlaylists(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.ytClient == nil {
-		writeJSON(w, http.StatusOK, map[string]interface{}{
+		writeJSON(w, http.StatusOK, map[string]any{
 			"playlists":  []PlaylistResponse{},
 			"authNeeded": true,
 			"authURL":    h.oauthURL(),
@@ -199,10 +199,10 @@ func (h *Handlers) handlePlaylistPreviewHTML(w http.ResponseWriter, r *http.Requ
 
 	w.Header().Set("Content-Type", "text/html")
 	tmpl.ExecuteTemplate(w, "previewModal", previewModalData{
-		Title:       r.URL.Query().Get("title"),
-		TotalItems:  len(items), // total before truncation
-		ShowCount:   minInt(len(previewItems), maxItems),
-		Items:       previewItems,
+		Title:      r.URL.Query().Get("title"),
+		TotalItems: len(items), // total before truncation
+		ShowCount:  minInt(len(previewItems), maxItems),
+		Items:      previewItems,
 	})
 }
 

@@ -28,7 +28,7 @@ const (
 )
 
 type cacheEntry struct {
-	data      interface{}
+	data      any
 	expiresAt time.Time
 }
 
@@ -42,11 +42,11 @@ type Client struct {
 }
 
 const (
-	cacheTTLPlaylists   = 2 * time.Minute
+	cacheTTLPlaylists     = 2 * time.Minute
 	cacheTTLPlaylistItems = 30 * time.Minute
 )
 
-func (c *Client) cacheGet(key string) (interface{}, bool) {
+func (c *Client) cacheGet(key string) (any, bool) {
 	c.mu.RLock()
 	e, ok := c.cache[key]
 	c.mu.RUnlock()
@@ -61,7 +61,7 @@ func (c *Client) cacheGet(key string) (interface{}, bool) {
 	return e.data, true
 }
 
-func (c *Client) cacheSet(key string, data interface{}, ttl time.Duration) {
+func (c *Client) cacheSet(key string, data any, ttl time.Duration) {
 	c.mu.Lock()
 	if c.cache == nil {
 		c.cache = make(map[string]cacheEntry)

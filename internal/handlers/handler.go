@@ -35,33 +35,33 @@ var tmpl = template.Must(template.New("").Funcs(template.FuncMap{
 
 // Config holds all dependencies needed by the handlers.
 type Config struct {
-	Store         *store.Store
-	Logger        *logging.Logger
-	YTClient      *youtube.Client
-	OTel          *telemetry.Telemetry
-	OAuthSetup    *youtube.OAuthSetup
-	GotifyClient  *gotify.Client
-	AdminHandlers *admin.Handlers
-	JobRunner     *job.Runner
+	Store            *store.Store
+	Logger           *logging.Logger
+	YTClient         *youtube.Client
+	OTel             *telemetry.Telemetry
+	OAuthSetup       *youtube.OAuthSetup
+	GotifyClient     *gotify.Client
+	AdminHandlers    *admin.Handlers
+	JobRunner        *job.Runner
 	ClientSecretPath string
-	DataDir       string
-	Version       string
+	DataDir          string
+	Version          string
 }
 
 // Handlers groups all HTTP handler methods and their dependencies.
 type Handlers struct {
-	store         *store.Store
-	logger        *logging.Logger
-	ytClient      *youtube.Client
-	otel          *telemetry.Telemetry
-	oauthSetup    *youtube.OAuthSetup
-	gotifyClient  *gotify.Client
-	admin         *admin.Handlers
-	jobRunner     *job.Runner
+	store            *store.Store
+	logger           *logging.Logger
+	ytClient         *youtube.Client
+	otel             *telemetry.Telemetry
+	oauthSetup       *youtube.OAuthSetup
+	gotifyClient     *gotify.Client
+	admin            *admin.Handlers
+	jobRunner        *job.Runner
 	clientSecretPath string
-	dataDir       string
-	version       string
-	csrfKey       []byte
+	dataDir          string
+	version          string
+	csrfKey          []byte
 }
 
 // New creates a new Handlers from the given config.
@@ -69,18 +69,18 @@ func New(cfg *Config) *Handlers {
 	csrfKey := make([]byte, 32)
 	rand.Read(csrfKey)
 	return &Handlers{
-		store:         cfg.Store,
-		logger:        cfg.Logger,
-		ytClient:      cfg.YTClient,
-		otel:          cfg.OTel,
-		oauthSetup:    cfg.OAuthSetup,
-		gotifyClient:  cfg.GotifyClient,
-		admin:         cfg.AdminHandlers,
-		jobRunner:     cfg.JobRunner,
+		store:            cfg.Store,
+		logger:           cfg.Logger,
+		ytClient:         cfg.YTClient,
+		otel:             cfg.OTel,
+		oauthSetup:       cfg.OAuthSetup,
+		gotifyClient:     cfg.GotifyClient,
+		admin:            cfg.AdminHandlers,
+		jobRunner:        cfg.JobRunner,
 		clientSecretPath: cfg.ClientSecretPath,
-		dataDir:       cfg.DataDir,
-		version:       cfg.Version,
-		csrfKey:       csrfKey,
+		dataDir:          cfg.DataDir,
+		version:          cfg.Version,
+		csrfKey:          csrfKey,
 	}
 }
 
@@ -147,7 +147,7 @@ type (
 	}
 
 	JobResponse struct {
-		JobID  string    `json:"jobId"`
+		JobID  string     `json:"jobId"`
 		Status job.Status `json:"status"`
 	}
 
@@ -218,14 +218,14 @@ type (
 	}
 
 	JobProgressData struct {
-		JobID         string
-		Pct           int
-		Done          int
-		Total         int
-		Label         string
+		JobID          string
+		Pct            int
+		Done           int
+		Total          int
+		Label          string
 		NewPlaylistURL template.URL
-		Error         string
-		ResumeBtnAttr template.HTML
+		Error          string
+		ResumeBtnAttr  template.HTML
 	}
 
 	ForceResumeData struct {
@@ -257,7 +257,7 @@ type (
 
 // --- Helpers ---
 
-func writeJSON(w http.ResponseWriter, status int, v interface{}) {
+func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(v)

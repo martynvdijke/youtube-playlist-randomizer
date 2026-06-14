@@ -11,8 +11,8 @@ import (
 
 func (h *Handlers) handleJobStatus(w http.ResponseWriter, r *http.Request) {
 	jobID := strings.TrimPrefix(r.URL.Path, "/api/jobs/")
-	if strings.HasSuffix(jobID, "/html") {
-		jobID = strings.TrimSuffix(jobID, "/html")
+	if before, ok := strings.CutSuffix(jobID, "/html"); ok {
+		jobID = before
 		if r.Header.Get("HX-Request") != "true" {
 			r.Header.Set("HX-Request", "true")
 		}
@@ -367,10 +367,7 @@ func writeJobProgressHTML(w http.ResponseWriter, jobID string, jp *job.Progress)
 	case job.StatusInserting:
 		pct := 50
 		if snap.Total > 0 {
-			pct = int(float64(snap.Done)/float64(snap.Total)*50) + 50
-			if pct > 99 {
-				pct = 99
-			}
+			pct = min(int(float64(snap.Done)/float64(snap.Total)*50)+50, 99)
 		}
 		tmpl.ExecuteTemplate(w, "jobProgressWorking", JobProgressData{
 			JobID: jobID,
@@ -393,7 +390,7 @@ func writeJobProgressHTML(w http.ResponseWriter, jobID string, jp *job.Progress)
 	case job.StatusPaused:
 		pct := 0
 		if snap.Total > 0 {
-			pct = int(float64(snap.Done)/float64(snap.Total) * 100)
+			pct = int(float64(snap.Done) / float64(snap.Total) * 100)
 		}
 		resumeAttr := template.HTML(fmt.Sprintf(`hx-vals='{"jobId":%q}'`, jobID))
 		tmpl.ExecuteTemplate(w, "jobProgressPaused", JobProgressData{
