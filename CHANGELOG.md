@@ -1,3 +1,10 @@
+## [1.15.2](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.15.1...v1.15.2) (2026-06-16)
+
+
+### Bug Fixes
+
+* **deps:** update all non-major dependencies to v0.285.0 ([1a36858](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/1a368582803918bb46c232d3227a658a2087badd))
+
 ## [1.15.1](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.15.0...v1.15.1) (2026-06-15)
 
 # [1.15.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.14.0...v1.15.0) (2026-06-13)
