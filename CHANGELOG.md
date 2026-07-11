@@ -1,3 +1,10 @@
+# [1.16.0](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.15.13...v1.16.0) (2026-07-11)
+
+
+### Features
+
+* add OpenTelemetry tracing, metrics, and logging support ([55185e8](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/55185e822c3a226d5b02e9b9e83ad27c586f8200))
+
 ## [1.15.13](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.15.12...v1.15.13) (2026-07-10)
 
 
