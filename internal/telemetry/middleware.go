@@ -157,10 +157,14 @@ func (t *Telemetry) RecordItemsInserted(ctx context.Context, count int) {
 }
 
 func (t *Telemetry) Shutdown(ctx context.Context) {
-	if t == nil || t.TracerProvider == nil {
+	if t == nil {
 		return
 	}
+
 	shutdownWithTimeout := func(name string, fn func(context.Context) error) {
+		if fn == nil {
+			return
+		}
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 		if err := fn(ctx); err != nil {
@@ -168,8 +172,15 @@ func (t *Telemetry) Shutdown(ctx context.Context) {
 		}
 	}
 
-	shutdownWithTimeout("meter provider", t.MeterProvider.Shutdown)
-	shutdownWithTimeout("tracer provider", t.TracerProvider.Shutdown)
+	if t.MeterProvider != nil {
+		shutdownWithTimeout("meter provider", t.MeterProvider.Shutdown)
+	}
+	if t.TracerProvider != nil {
+		shutdownWithTimeout("tracer provider", t.TracerProvider.Shutdown)
+	}
+	if t.LoggerProvider != nil {
+		shutdownWithTimeout("logger provider", t.LoggerProvider.Shutdown)
+	}
 }
 
 func GetEnvWithDefault(key, defaultVal string) string {

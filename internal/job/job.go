@@ -223,7 +223,13 @@ func (r *Runner) run(ctx context.Context, jobID, newName string, jp *Progress, p
 		shuffled[i], shuffled[j] = shuffled[j], shuffled[i]
 	})
 
-	if err := r.store.SaveShuffledItems(jobID, shuffled); err != nil {
+	var tracer trace.Tracer
+	if r.otel != nil {
+		tracer = r.otel.Tracer
+	}
+	if err := telemetry.TraceDBQuery(ctx, tracer, "SaveShuffledItems", func(_ context.Context) error {
+		return r.store.SaveShuffledItems(jobID, shuffled)
+	}); err != nil {
 		setError(fmt.Sprintf("Failed to save shuffled items: %v", err))
 		return
 	}
@@ -378,8 +384,19 @@ func (r *Runner) insertItems(
 	setError func(string),
 	progress func(done, total int, newPlaylistID string),
 ) {
-	uninserted, err := r.store.GetUninsertedItems(jobID)
-	if err != nil {
+	var tracer trace.Tracer
+	if r.otel != nil {
+		tracer = r.otel.Tracer
+	}
+	var uninserted []struct {
+		VideoID  string
+		Position int
+	}
+	if err := telemetry.TraceDBQuery(ctx, tracer, "GetUninsertedItems", func(ctx context.Context) error {
+		var innerErr error
+		uninserted, innerErr = r.store.GetUninsertedItems(jobID)
+		return innerErr
+	}); err != nil {
 		setError(fmt.Sprintf("Failed to get uninserted items: %v", err))
 		return
 	}
@@ -436,8 +453,16 @@ func (r *Runner) insertItems(
 // ResumePending scans for pending/paused/interrupted jobs and resumes them
 // if quota permits. Called at startup and periodically by Poller.
 func (r *Runner) ResumePending(ctx context.Context) {
-	jobs, err := r.store.GetPendingJobs()
-	if err != nil {
+	var tracer trace.Tracer
+	if r.otel != nil {
+		tracer = r.otel.Tracer
+	}
+	var jobs []store.Job
+	if err := telemetry.TraceDBQuery(ctx, tracer, "GetPendingJobs", func(ctx context.Context) error {
+		var innerErr error
+		jobs, innerErr = r.store.GetPendingJobs()
+		return innerErr
+	}); err != nil {
 		r.logger.Warnc(ctx, "failed to check for pending jobs", "error", err.Error())
 		return
 	}
@@ -503,8 +528,16 @@ func (r *Runner) Poller(ctx context.Context) {
 // GetProgress reads job progress from the database and returns a Progress
 // snapshot. Returns nil if the job is not found.
 func (r *Runner) GetProgress(jobID string) *Progress {
-	j, err := r.store.GetJob(jobID)
-	if err != nil {
+	var tracer trace.Tracer
+	if r.otel != nil {
+		tracer = r.otel.Tracer
+	}
+	var j *store.Job
+	if err := telemetry.TraceDBQuery(context.Background(), tracer, "GetJob", func(ctx context.Context) error {
+		var innerErr error
+		j, innerErr = r.store.GetJob(jobID)
+		return innerErr
+	}); err != nil {
 		return nil
 	}
 	return &Progress{

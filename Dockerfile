@@ -31,6 +31,19 @@ COPY --from=ts-builder /app/static/js ./static/js
 
 RUN mkdir -p /db /app/media /config && chmod 777 /db /app/media /config
 
+# OpenTelemetry configuration (all optional):
+#   OTEL_EXPORTER_OTLP_ENDPOINT   - OTLP collector endpoint (e.g. http://otel-collector:4318)
+#   OTEL_EXPORTER_OTLP_PROTOCOL   - Transport protocol: "grpc" (default) or "http"
+#   OTEL_EXPORTER_OTLP_HEADERS    - JSON headers for OTLP export (e.g. {"Authorization":"Bearer xxx"})
+#   OTEL_SERVICE_NAME             - Service name (default: youtube-playlist-randomizer)
+#   OTEL_TRACES_SAMPLER           - Sampler: always_on, always_off, traceidratio,
+#                                    parentbased_always_on, parentbased_always_off,
+#                                    parentbased_traceidratio (default)
+#   OTEL_TRACES_SAMPLER_ARG       - Sample ratio for traceidratio sampler (0.0-1.0)
+#   OTEL_RESOURCE_ATTRIBUTES      - Comma-separated key=value resource attributes
+#
+# Disable specific signals by setting the corresponding env var to "" or "false".
+# See internal/telemetry/telemetry.go Settings struct for programmatic control.
 EXPOSE 6270
 
 CMD ["./ypr-server"]

@@ -2,10 +2,13 @@ package telemetry
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"testing"
+
+	"go.opentelemetry.io/otel/trace"
 )
 
 func TestServiceNameDefault(t *testing.T) {
@@ -282,5 +285,164 @@ func TestMiddlewarePanicSafety(t *testing.T) {
 
 	if rr.Code != http.StatusOK {
 		t.Errorf("expected status 200, got %d", rr.Code)
+	}
+}
+
+func TestTraceDBQuery(t *testing.T) {
+	tel := newTestTelemetry(t)
+	defer tel.Shutdown(context.Background())
+
+	called := false
+	err := TraceDBQuery(context.Background(), tel.Tracer, "TestOp", func(ctx context.Context) error {
+		called = true
+		_ = trace.SpanFromContext(ctx)
+		return nil
+	})
+	if err != nil {
+		t.Errorf("TraceDBQuery returned error: %v", err)
+	}
+	if !called {
+		t.Error("callback was not called")
+	}
+}
+
+func TestTraceDBQuery_NilTracer(t *testing.T) {
+	called := false
+	err := TraceDBQuery(context.Background(), nil, "TestOp", func(ctx context.Context) error {
+		called = true
+		return nil
+	})
+	if err != nil {
+		t.Errorf("TraceDBQuery with nil tracer returned error: %v", err)
+	}
+	if !called {
+		t.Error("callback was not called")
+	}
+}
+
+func TestTraceDBQuery_ErrorPropagation(t *testing.T) {
+	tel := newTestTelemetry(t)
+	defer tel.Shutdown(context.Background())
+
+	expected := fmt.Errorf("db error")
+	err := TraceDBQuery(context.Background(), tel.Tracer, "TestOp", func(ctx context.Context) error {
+		return expected
+	})
+	if err != expected {
+		t.Errorf("expected error %v, got %v", expected, err)
+	}
+}
+
+func TestNewSampler_AlwaysOn(t *testing.T) {
+	os.Setenv("OTEL_TRACES_SAMPLER", "always_on")
+	defer os.Unsetenv("OTEL_TRACES_SAMPLER")
+
+	cfg := DefaultSettings()
+	cfg.TracesEnabled = true
+	tel, err := New(cfg)
+	if err != nil {
+		t.Fatalf("New() failed: %v", err)
+	}
+	tel.Shutdown(context.Background())
+}
+
+func TestParseHeadersJSON(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  map[string]string
+	}{
+		{
+			name:  "empty string",
+			input: "",
+			want:  nil,
+		},
+		{
+			name:  "valid json",
+			input: `{"Authorization":"Bearer test123","X-Custom":"value"}`,
+			want:  map[string]string{"Authorization": "Bearer test123", "X-Custom": "value"},
+		},
+		{
+			name:  "invalid json",
+			input: `{bad`,
+			want:  nil,
+		},
+		{
+			name:  "empty object",
+			input: `{}`,
+			want:  nil,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ParseHeadersJSON(tt.input)
+			if len(got) != len(tt.want) {
+				t.Errorf("ParseHeadersJSON() len = %d, want %d", len(got), len(tt.want))
+			}
+			for k, v := range tt.want {
+				if got[k] != v {
+					t.Errorf("ParseHeadersJSON()[%q] = %q, want %q", k, got[k], v)
+				}
+			}
+		})
+	}
+}
+
+func TestNewResourceWithAttributes(t *testing.T) {
+	os.Setenv("OTEL_RESOURCE_ATTRIBUTES", "deployment.environment=staging,service.namespace=myapp")
+	defer os.Unsetenv("OTEL_RESOURCE_ATTRIBUTES")
+
+	res, err := newResource("test-service")
+	if err != nil {
+		t.Fatalf("newResource() failed: %v", err)
+	}
+	if res == nil {
+		t.Fatal("newResource() returned nil")
+	}
+}
+
+func TestNew_NoExportTarget(t *testing.T) {
+	cfg := Settings{
+		TracesEnabled:   true,
+		MetricsEnabled:  true,
+		LogsEnabled:     true,
+		TraceSampleRate: 1.0,
+	}
+	tel, err := New(cfg)
+	if err != nil {
+		t.Fatalf("New() with no endpoint failed: %v", err)
+	}
+	defer tel.Shutdown(context.Background())
+
+	if tel.TracerProvider == nil {
+		t.Error("TracerProvider is nil")
+	}
+	if tel.MeterProvider == nil {
+		t.Error("MeterProvider is nil")
+	}
+	if tel.LoggerProvider == nil {
+		t.Error("LoggerProvider is nil")
+	}
+	if tel.Tracer == nil {
+		t.Error("Tracer is nil")
+	}
+	if tel.Meter == nil {
+		t.Error("Meter is nil")
+	}
+}
+
+func TestTraceDBQuery_SpanName(t *testing.T) {
+	tel := newTestTelemetry(t)
+	defer tel.Shutdown(context.Background())
+
+	err := TraceDBQuery(context.Background(), tel.Tracer, "GetItems", func(ctx context.Context) error {
+		span := trace.SpanFromContext(ctx)
+		if span.SpanContext().IsValid() {
+			t.Log("span created successfully")
+		}
+		return nil
+	})
+	if err != nil {
+		t.Errorf("TraceDBQuery failed: %v", err)
 	}
 }
