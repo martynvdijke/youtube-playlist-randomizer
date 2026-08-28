@@ -1,3 +1,12 @@
+## [1.16.21](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.16.20...v1.16.21) (2026-08-28)
+
+
+### Bug Fixes
+
+* **ci:** make pinact check non-blocking ([5208550](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/5208550d84aa5a7b65074624de1b1e6db20e7f0e))
+* **ci:** remove unsupported --diff flag from pinact ([d46833f](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/d46833f485fd4a42c268406e529fe0c8485b1431))
+* **ci:** update actionlint to v1.7.12 (v1 tag removed upstream) ([fe97bd2](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/fe97bd25f972e2f81d38591a7b3831f584e21d37))
+
 ## [1.16.20](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.16.19...v1.16.20) (2026-08-26)
 
 
