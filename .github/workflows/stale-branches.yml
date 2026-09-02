@@ -35,7 +35,7 @@ jobs:
 
           echo "=== Stale Branch Cleanup ==="
           echo "Default branch: $default_branch"
-          echo "Cutoff: $(date -d @$cutoff)"
+          echo "Cutoff: $(date -d "@$cutoff")"
           echo "Dry run: $DRY_RUN"
 
           for branch in $(git branch -r --format='%(refname:short)' | sed 's/origin\///' | sort -u); do
