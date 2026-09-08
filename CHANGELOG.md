@@ -1,3 +1,10 @@
+## [1.16.26](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.16.25...v1.16.26) (2026-09-08)
+
+
+### Bug Fixes
+
+* **deps:** update module golang.org/x/oauth2 to v0.37.0 ([#72](https://github.com/martynvdijke/youtube-playlist-randomizer/issues/72)) ([cf79009](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/cf79009f4d088d1ce1bc22be5febb26182693642))
+
 ## [1.16.25](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.16.24...v1.16.25) (2026-09-07)
 
 ## [1.16.24](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.16.23...v1.16.24) (2026-09-05)
