@@ -3,7 +3,7 @@ module github.com/martynvdijke/youtube-playlist-randomizer
 go 1.26.0
 
 require (
-	go.opentelemetry.io/contrib/bridges/otelslog v0.20.1
+	go.opentelemetry.io/contrib/bridges/otelslog v0.21.0
 	go.opentelemetry.io/otel v1.47.0
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc v0.23.0
 	go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploghttp v0.23.0

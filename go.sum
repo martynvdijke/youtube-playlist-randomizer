@@ -93,6 +93,8 @@ go.opentelemetry.io/contrib/bridges/otelslog v0.20.0 h1:oEl2Pw/i4OQwhAuda2pAHFAc
 go.opentelemetry.io/contrib/bridges/otelslog v0.20.0/go.mod h1:yMSQaiiq5dpfrSJCYLBcqFeJkFFI67seT4ngvx6jfVo=
 go.opentelemetry.io/contrib/bridges/otelslog v0.20.1 h1:5sHc4ToTFjfSZCtGAAM6jPunICAmJX73htv372T4ipc=
 go.opentelemetry.io/contrib/bridges/otelslog v0.20.1/go.mod h1:oa6kgvyz/3GYW04dohd0++xJIH4xdQY8PAbpeCMaM8M=
+go.opentelemetry.io/contrib/bridges/otelslog v0.21.0 h1:/CdgE52i1OEPHhsGUqrggYNRaZy4v4YgVenGd52dRBI=
+go.opentelemetry.io/contrib/bridges/otelslog v0.21.0/go.mod h1:9pBdbVbuehIDzxN4accnzzxEUPT8Nq7grbZMo+J1VN4=
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0 h1:OyrsyzuttWTSur2qN/Lm0m2a8yqyIjUVBZcxFPuXq2o=
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0/go.mod h1:C2NGBr+kAB4bk3xtMXfZ94gqFDtg/GkI7e9zqGh5Beg=
 go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.70.0 h1:LMuyCAyfalSjDyjdC65nK6N0zoTT63+E/u95X0JovZI=
