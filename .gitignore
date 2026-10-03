@@ -41,3 +41,6 @@ ypr.db
 Thumbs.db
 openspec/
 .opencode/
+
+# Zensical build output
+site/
