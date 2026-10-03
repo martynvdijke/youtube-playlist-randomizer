@@ -1,3 +1,10 @@
+## [1.16.37](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.16.36...v1.16.37) (2026-10-03)
+
+
+### Bug Fixes
+
+* **deps:** update module go.opentelemetry.io/contrib/bridges/otelslog to v0.21.0 ([#84](https://github.com/martynvdijke/youtube-playlist-randomizer/issues/84)) ([7d5aafb](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/7d5aafb79423b17c1c59aea6c5d97fdab220c6e6))
+
 ## [1.16.36](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.16.35...v1.16.36) (2026-10-02)
 
 
