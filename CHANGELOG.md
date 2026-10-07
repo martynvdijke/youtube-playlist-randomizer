@@ -1,3 +1,10 @@
+## [1.16.41](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.16.40...v1.16.41) (2026-10-07)
+
+
+### Bug Fixes
+
+* **deps:** update module google.golang.org/api to v0.301.0 ([f845d72](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/f845d722e717471cc7cb52b60bbcdde0b68f89a3))
+
 ## [1.16.40](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.16.39...v1.16.40) (2026-10-05)
 
 ## [1.16.39](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.16.38...v1.16.39) (2026-10-04)
