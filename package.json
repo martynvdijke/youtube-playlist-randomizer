@@ -1,6 +1,6 @@
 {
   "name": "youtube-playlist-randomizer",
-  "version": "1.16.42",
+  "version": "1.16.43",
   "private": true,
   "scripts": {
     "build": "tsc",
