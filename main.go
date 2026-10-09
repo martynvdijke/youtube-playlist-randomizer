@@ -24,7 +24,7 @@ import (
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/youtube"
 )
 
-const version = "1.16.43"
+const version = "1.16.44"
 
 func findClientSecret() string {
 	if os.Getenv("DOCKER") == "true" {
