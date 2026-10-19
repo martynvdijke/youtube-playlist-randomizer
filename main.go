@@ -144,7 +144,7 @@ func main() {
 
 	// --- Gotify notifications ---
 	gURL, _ := db.GetSetting("gotify_url")
-	gToken, _ := db.GetSetting("gotify_token")
+	gToken, _ := db.GetSecretSetting("gotify_token")
 	gEnabled, _ := db.GetSetting("gotify_enabled")
 	gotifyClient := gotify.New(gURL, gToken, gEnabled == "true")
 
@@ -200,6 +200,13 @@ func main() {
 	}
 
 	// --- HTTP handlers ---
+	adminPassword := os.Getenv("ADMIN_PASSWORD")
+	if adminPassword == "" {
+		logger.Warnc(context.Background(), "ADMIN_PASSWORD is not set; admin and mutating routes are restricted to loopback clients")
+	}
+	secureCookies := os.Getenv("COOKIE_SECURE") == "true" ||
+		strings.HasPrefix(os.Getenv("OAUTH_CALLBACK_URL"), "https://")
+
 	h := handlers.New(&handlers.Config{
 		Store:            db,
 		Logger:           logger,
@@ -212,13 +219,19 @@ func main() {
 		ClientSecretPath: clientSecretPath,
 		DataDir:          dataDir,
 		Version:          version,
+		AdminPassword:    adminPassword,
+		SessionSecret:    os.Getenv("SESSION_SECRET"),
+		AllowedOrigin:    os.Getenv("CORS_ALLOWED_ORIGIN"),
+		SecureCookies:    secureCookies,
 	})
 
 	// --- HTTP server ---
 	mux := http.NewServeMux()
 	h.RegisterRoutes(mux)
 
-	var handler http.Handler = h.CSRFMiddleware(mux)
+	var handler http.Handler = mux
+	handler = h.CSRFMiddleware(handler)
+	handler = h.AuthMiddleware(handler)
 	handler = h.CORSMiddleware(handler)
 	if otel != nil {
 		handler = otel.Middleware(handler)

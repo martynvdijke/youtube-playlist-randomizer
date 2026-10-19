@@ -18,16 +18,17 @@ func (h *Handlers) handlePlaylists(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.ytClient == nil {
+	client := h.getYTClient()
+	if client == nil {
 		writeJSON(w, http.StatusOK, map[string]any{
 			"playlists":  []PlaylistResponse{},
 			"authNeeded": true,
-			"authURL":    h.oauthURL(),
+			"authURL":    h.oauthURLWithState(h.issueOAuthState(w)),
 		})
 		return
 	}
 
-	playlists, err := h.ytClient.GetPlaylists(r.Context())
+	playlists, err := client.GetPlaylists(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -51,12 +52,13 @@ func (h *Handlers) handlePlaylists(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) handlePlaylistsHTML(w http.ResponseWriter, r *http.Request) {
 	query := strings.ToLower(r.URL.Query().Get("q"))
 
-	if h.ytClient == nil {
+	client := h.getYTClient()
+	if client == nil {
 		h.renderAuthRequired(w, r)
 		return
 	}
 
-	playlists, err := h.ytClient.GetPlaylists(r.Context())
+	playlists, err := client.GetPlaylists(r.Context())
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -167,12 +169,13 @@ func (h *Handlers) handlePlaylistPreviewHTML(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	if h.ytClient == nil {
+	client := h.getYTClient()
+	if client == nil {
 		http.Error(w, "YouTube API not available", http.StatusBadRequest)
 		return
 	}
 
-	items, err := h.ytClient.GetPlaylistItems(r.Context(), playlistID)
+	items, err := client.GetPlaylistItems(r.Context(), playlistID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

@@ -59,8 +59,8 @@ func TestHandleSettingsGotify_Get(t *testing.T) {
 	if result.URL != "http://gotify:8080" {
 		t.Errorf("expected URL 'http://gotify:8080', got '%s'", result.URL)
 	}
-	if result.Token != "myapptoken" {
-		t.Errorf("expected Token 'myapptoken', got '%s'", result.Token)
+	if result.Token != maskedSecret {
+		t.Errorf("expected masked Token %q, got '%s'", maskedSecret, result.Token)
 	}
 	if result.Enabled != "true" {
 		t.Errorf("expected Enabled 'true', got '%s'", result.Enabled)
@@ -111,13 +111,59 @@ func TestHandleSettingsGotify_Post(t *testing.T) {
 	if got != "http://gotify:8080" {
 		t.Errorf("expected gotify_url 'http://gotify:8080', got '%s'", got)
 	}
-	got, _ = h.store.GetSetting("gotify_token")
+	got, _ = h.store.GetSecretSetting("gotify_token")
 	if got != "apptoken" {
 		t.Errorf("expected gotify_token 'apptoken', got '%s'", got)
 	}
 	got, _ = h.store.GetSetting("gotify_enabled")
 	if got != "true" {
 		t.Errorf("expected gotify_enabled 'true', got '%s'", got)
+	}
+}
+
+func TestHandleSettingsGotify_BlankTokenKeepsExisting(t *testing.T) {
+	h := newTestHandlers(t)
+	if err := h.store.SetSecretSetting("gotify_token", "existing-token"); err != nil {
+		t.Fatalf("set token: %v", err)
+	}
+
+	body := "url=http://gotify:8080&token=&enabled=true"
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest("POST", "/api/admin/settings/gotify", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	h.HandleSettingsGotify(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+
+	got, err := h.store.GetSecretSetting("gotify_token")
+	if err != nil {
+		t.Fatalf("get token: %v", err)
+	}
+	if got != "existing-token" {
+		t.Fatalf("expected existing token preserved, got %q", got)
+	}
+
+	// The API must never echo the token back.
+	rr = httptest.NewRecorder()
+	h.HandleSettingsGotify(rr, httptest.NewRequest("GET", "/api/admin/settings/gotify", nil))
+	if strings.Contains(rr.Body.String(), "existing-token") {
+		t.Fatalf("token leaked in settings response: %s", rr.Body.String())
+	}
+}
+
+func TestHandleSettingsGotifyHTML_MasksToken(t *testing.T) {
+	h := newTestHandlers(t)
+	if err := h.store.SetSecretSetting("gotify_token", "html-secret"); err != nil {
+		t.Fatalf("set token: %v", err)
+	}
+	rr := httptest.NewRecorder()
+	h.HandleSettingsGotifyHTML(rr, httptest.NewRequest("GET", "/api/admin/settings/gotify/html", nil))
+	if strings.Contains(rr.Body.String(), "html-secret") {
+		t.Fatalf("token leaked in HTML: %s", rr.Body.String())
+	}
+	if !strings.Contains(rr.Body.String(), "leave blank to keep current") {
+		t.Errorf("expected masked placeholder hint, got: %s", rr.Body.String())
 	}
 }
 

@@ -1,0 +1,34 @@
+{{define "login"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Login · YouTube Playlist Randomizer</title>
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  .login-page{max-width:360px;margin:12vh auto;padding:0 20px}
+  .login-page h1{font-size:22px;margin-bottom:8px}
+  .login-page .sub{color:#aaa;font-size:14px;margin-bottom:24px}
+  .login-page label{display:block;font-size:13px;color:#bbb;margin-bottom:6px}
+  .login-page input[type=password]{width:100%;padding:12px;border-radius:6px;border:1px solid #333;background:#1a1a1a;color:#eee;font-size:15px}
+  .login-page button{width:100%;margin-top:16px;padding:12px;border:0;border-radius:6px;background:#ff4444;color:#fff;font-size:15px;font-weight:600;cursor:pointer}
+  .login-error{color:#ff8a80;font-size:14px;margin-bottom:14px}
+</style>
+</head>
+<body>
+<main class="login-page">
+  <h1>YouTube Playlist Randomizer</h1>
+  <p class="sub">Sign in to manage playlists and settings.</p>
+  {{if .Error}}<p class="login-error">{{.Error}}</p>{{end}}
+  <form method="post" action="/login">
+    <input type="hidden" name="csrf_token" value="{{.CSRFToken}}">
+    <input type="hidden" name="next" value="{{.Next}}">
+    <label for="password">Admin password</label>
+    <input type="password" id="password" name="password" autocomplete="current-password" autofocus required>
+    <button type="submit">Sign in</button>
+  </form>
+</main>
+</body>
+</html>
+{{end}}

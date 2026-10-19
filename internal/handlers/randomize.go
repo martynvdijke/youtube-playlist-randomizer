@@ -13,7 +13,7 @@ func (h *Handlers) handleRandomize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.ytClient == nil {
+	if h.getYTClient() == nil {
 		writeError(w, http.StatusBadRequest, "YouTube API not available in mock mode")
 		return
 	}
@@ -57,7 +57,7 @@ func (h *Handlers) handleRandomizeHTML(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.ytClient == nil {
+	if h.getYTClient() == nil {
 		w.WriteHeader(http.StatusBadRequest)
 		tmpl.ExecuteTemplate(w, "randomizeError", RandomizeErrorData{Error: "YouTube API not available in mock mode"})
 		return

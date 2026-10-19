@@ -79,7 +79,8 @@
     </div>
     <div class="form-field">
       <label for="gotify-token">App Token</label>
-      <input type="password" id="gotify-token" name="token" placeholder="Gotify application token" value="{{.Token}}" autocomplete="off">
+      <input type="password" id="gotify-token" name="token" placeholder="{{if .Token}}{{.Token}} (leave blank to keep current){{else}}Gotify application token{{end}}" value="" autocomplete="off">
+      <p class="field-hint">Stored tokens are never shown. Leave blank to keep the existing token.</p>
     </div>
     <div class="form-field form-field-row">
       <label class="toggle-label">

@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/admin"
@@ -46,13 +47,25 @@ type Config struct {
 	ClientSecretPath string
 	DataDir          string
 	Version          string
+
+	// AdminPassword enables the login flow for admin and mutating routes.
+	// When empty, those routes are restricted to loopback clients only.
+	AdminPassword string
+	// SessionSecret signs session cookies. When empty a random key is
+	// generated at startup (existing sessions are invalidated on restart).
+	SessionSecret string
+	// AllowedOrigin is the single cross-origin allowed by CORS. Empty means
+	// no cross-origin access (same-origin only).
+	AllowedOrigin string
+	// SecureCookies controls the Secure flag on session cookies. Set when
+	// served over HTTPS (directly or via a trusted TLS-terminating proxy).
+	SecureCookies bool
 }
 
 // Handlers groups all HTTP handler methods and their dependencies.
 type Handlers struct {
 	store            *store.Store
 	logger           *logging.Logger
-	ytClient         *youtube.Client
 	otel             *telemetry.Telemetry
 	oauthSetup       *youtube.OAuthSetup
 	gotifyClient     *gotify.Client
@@ -62,12 +75,33 @@ type Handlers struct {
 	dataDir          string
 	version          string
 	csrfKey          []byte
+
+	adminPassword string
+	sessionKey    []byte
+	allowedOrigin string
+	secureCookies bool
+
+	// ytMu guards ytClient, which is replaced at runtime after an OAuth
+	// re-authentication while request handlers read it concurrently.
+	ytMu     sync.RWMutex
+	ytClient *youtube.Client
+
+	// oauthMu guards the one-time OAuth state values handed to Google.
+	oauthMu     sync.Mutex
+	oauthStates map[string]time.Time
 }
 
 // New creates a new Handlers from the given config.
 func New(cfg *Config) *Handlers {
 	csrfKey := make([]byte, 32)
 	rand.Read(csrfKey)
+
+	sessionKey := []byte(cfg.SessionSecret)
+	if len(sessionKey) == 0 {
+		sessionKey = make([]byte, 32)
+		rand.Read(sessionKey)
+	}
+
 	return &Handlers{
 		store:            cfg.Store,
 		logger:           cfg.Logger,
@@ -81,7 +115,26 @@ func New(cfg *Config) *Handlers {
 		dataDir:          cfg.DataDir,
 		version:          cfg.Version,
 		csrfKey:          csrfKey,
+		adminPassword:    cfg.AdminPassword,
+		sessionKey:       sessionKey,
+		allowedOrigin:    cfg.AllowedOrigin,
+		secureCookies:    cfg.SecureCookies,
+		oauthStates:      make(map[string]time.Time),
 	}
+}
+
+// getYTClient returns the current YouTube client in a race-free way.
+func (h *Handlers) getYTClient() *youtube.Client {
+	h.ytMu.RLock()
+	defer h.ytMu.RUnlock()
+	return h.ytClient
+}
+
+// setYTClient replaces the YouTube client in a race-free way.
+func (h *Handlers) setYTClient(c *youtube.Client) {
+	h.ytMu.Lock()
+	h.ytClient = c
+	h.ytMu.Unlock()
 }
 
 // RegisterRoutes registers all HTTP routes on the given mux.
@@ -106,6 +159,10 @@ func (h *Handlers) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/jobs/queue/html", h.handleJobQueueHTML)
 	mux.HandleFunc("/callback", h.handleOAuthCallback)
 	mux.HandleFunc("/api/auth", h.handleAuth)
+
+	// Login/logout for the admin session cookie.
+	mux.HandleFunc("/login", h.handleLogin)
+	mux.HandleFunc("/logout", h.handleLogout)
 
 	// Admin panel routes
 	mux.HandleFunc("/api/admin/logs/html", h.admin.HandleLogsHTML)
@@ -297,14 +354,25 @@ func (h *Handlers) validateCSRF(r *http.Request) bool {
 	return hmac.Equal([]byte(cookie.Value), []byte(requestToken))
 }
 
-// CORSMiddleware adds permissive CORS headers for local development.
+// CORSMiddleware only allows cross-origin requests from the single origin
+// configured via CORS_ALLOWED_ORIGIN. When unset, no CORS headers are added
+// (same-origin only).
 func (h *Handlers) CORSMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-CSRF-Token")
+		origin := r.Header.Get("Origin")
+		if h.allowedOrigin != "" && origin == h.allowedOrigin {
+			w.Header().Set("Access-Control-Allow-Origin", h.allowedOrigin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-CSRF-Token")
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Add("Vary", "Origin")
+		}
 		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusOK)
+			if h.allowedOrigin != "" && origin != "" && origin != h.allowedOrigin {
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -323,7 +391,7 @@ func (h *Handlers) CSRFMiddleware(next http.Handler) http.Handler {
 			Path:     "/",
 			SameSite: http.SameSiteLaxMode,
 			HttpOnly: false,
-			Secure:   false,
+			Secure:   h.secureCookies || r.TLS != nil,
 		})
 
 		if !h.validateCSRF(r) {
@@ -354,6 +422,13 @@ func (h *Handlers) handleRoot(w http.ResponseWriter, r *http.Request) {
 	content = strings.Replace(content, "<!-- csrf -->",
 		fmt.Sprintf(`<meta name="csrf-token" content="%s">`, h.csrfToken()), 1)
 
+	// Show a logout control only when password authentication is enabled.
+	authNav := ""
+	if h.adminPassword != "" {
+		authNav = fmt.Sprintf(`<form method="post" action="/logout" class="nav-logout-form"><input type="hidden" name="csrf_token" value="%s"><button type="submit" class="nav-link">Logout</button></form>`, h.csrfToken())
+	}
+	content = strings.Replace(content, "<!-- auth-nav -->", authNav, 1)
+
 	umamiURL, _ := h.store.GetSetting("umami_url")
 	umamiWebsiteID, _ := h.store.GetSetting("umami_website_id")
 	if umamiURL != "" && umamiWebsiteID != "" {
@@ -369,9 +444,10 @@ func (h *Handlers) handleRoot(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprint(w, content)
 }
 
-func (h *Handlers) oauthURL() string {
+// oauthURLWithState builds the Google consent URL for the given one-time state.
+func (h *Handlers) oauthURLWithState(state string) string {
 	if h.oauthSetup == nil {
 		return ""
 	}
-	return youtube.AuthURL(h.oauthSetup)
+	return youtube.AuthURL(h.oauthSetup, state)
 }

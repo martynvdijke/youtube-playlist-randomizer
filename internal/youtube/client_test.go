@@ -154,7 +154,10 @@ func TestAuthURL(t *testing.T) {
 		},
 	}
 
-	url := AuthURL(setup)
+	url := AuthURL(setup, "random-state-value")
+	if !strings.Contains(url, "state=random-state-value") {
+		t.Errorf("expected state in URL, got %s", url)
+	}
 	if !strings.Contains(url, "client_id=test-id") {
 		t.Errorf("expected client_id in URL, got %s", url)
 	}

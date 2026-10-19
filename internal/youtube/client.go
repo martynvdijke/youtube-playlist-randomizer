@@ -438,8 +438,11 @@ func LoadConfig(clientSecretPath string) (*OAuthSetup, error) {
 	return &OAuthSetup{Config: config, SecretDir: filepath.Dir(clientSecretPath)}, nil
 }
 
-func AuthURL(setup *OAuthSetup) string {
-	return setup.Config.AuthCodeURL("state-token", oauth2.AccessTypeOffline, oauth2.ApprovalForce)
+// AuthURL builds the Google consent URL with a caller-supplied one-time state.
+// The caller is responsible for generating random state and verifying it on the
+// callback.
+func AuthURL(setup *OAuthSetup, state string) string {
+	return setup.Config.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.ApprovalForce)
 }
 
 func HandleCallback(setup *OAuthSetup, code string, extraDirs ...string) error {

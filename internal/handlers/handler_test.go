@@ -116,27 +116,39 @@ func TestQuotaText(t *testing.T) {
 }
 
 func TestCorsMiddleware(t *testing.T) {
-	h := &Handlers{}
-	handler := h.CORSMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("ok"))
-	}))
+	const allowed = "https://app.example.com"
 
 	tests := []struct {
-		name       string
-		method     string
-		wantStatus int
-		wantBody   string
-		wantOrigin string
+		name        string
+		origin      string
+		method      string
+		wantStatus  int
+		wantBody    string
+		wantOrigin  string
+		wantBlocked bool
 	}{
-		{"GET request", "GET", http.StatusOK, "ok", "*"},
-		{"OPTIONS request", "OPTIONS", http.StatusOK, "", "*"},
-		{"POST request", "POST", http.StatusOK, "ok", "*"},
+		{"same-origin GET", "", "GET", http.StatusOK, "ok", "", false},
+		{"allowed origin GET", allowed, "GET", http.StatusOK, "ok", allowed, false},
+		{"disallowed origin GET", "https://evil.example.com", "GET", http.StatusOK, "ok", "", false},
+		{"allowed preflight", allowed, "OPTIONS", http.StatusNoContent, "", allowed, false},
+		{"disallowed preflight", "https://evil.example.com", "OPTIONS", http.StatusForbidden, "", "", true},
+		{"no-origin preflight", "", "OPTIONS", http.StatusNoContent, "", "", false},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			called := false
+			h := &Handlers{allowedOrigin: allowed}
+			handler := h.CORSMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				called = true
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte("ok"))
+			}))
+
 			req := httptest.NewRequest(tc.method, "/test", nil)
+			if tc.origin != "" {
+				req.Header.Set("Origin", tc.origin)
+			}
 			rr := httptest.NewRecorder()
 			handler.ServeHTTP(rr, req)
 
@@ -146,11 +158,27 @@ func TestCorsMiddleware(t *testing.T) {
 			if rr.Body.String() != tc.wantBody {
 				t.Errorf("expected body %q, got %q", tc.wantBody, rr.Body.String())
 			}
-			origin := rr.Header().Get("Access-Control-Allow-Origin")
-			if origin != tc.wantOrigin {
-				t.Errorf("expected Access-Control-Allow-Origin %q, got %q", tc.wantOrigin, origin)
+			if got := rr.Header().Get("Access-Control-Allow-Origin"); got != tc.wantOrigin {
+				t.Errorf("expected Access-Control-Allow-Origin %q, got %q", tc.wantOrigin, got)
+			}
+			if tc.method == "OPTIONS" && called {
+				t.Error("OPTIONS request should not reach the wrapped handler")
 			}
 		})
+	}
+}
+
+func TestCorsMiddleware_NoConfiguredOriginIsSameOriginOnly(t *testing.T) {
+	h := &Handlers{}
+	handler := h.CORSMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	req := httptest.NewRequest("GET", "/test", nil)
+	req.Header.Set("Origin", "https://evil.example.com")
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	if got := rr.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Errorf("expected no CORS header without configuration, got %q", got)
 	}
 }
 

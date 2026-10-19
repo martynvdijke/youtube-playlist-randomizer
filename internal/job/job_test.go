@@ -2,6 +2,7 @@ package job
 
 import (
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/martynvdijke/youtube-playlist-randomizer/internal/store"
@@ -107,4 +108,36 @@ func TestGetProgress_Found(t *testing.T) {
 	if p.Status != StatusPending {
 		t.Errorf("expected StatusPending, got %s", p.Status)
 	}
+}
+
+func TestQuotaAvailableNilQuota(t *testing.T) {
+	if quotaAvailable(nil, 0) {
+		t.Error("nil quota must not be considered available")
+	}
+	if quotaAvailable(nil, store.QuotaListPlaylistItems) {
+		t.Error("nil quota must not be considered available for any cost")
+	}
+	if !quotaAvailable(&store.QuotaInfo{Remaining: 10}, 10) {
+		t.Error("expected exact remaining quota to be available")
+	}
+	if quotaAvailable(&store.QuotaInfo{Remaining: 9}, 10) {
+		t.Error("expected insufficient quota to be unavailable")
+	}
+}
+
+func TestSetYTClientIsRaceFree(t *testing.T) {
+	r := New(nil, nil, nil, nil, nil)
+	var wg sync.WaitGroup
+	for i := 0; i < 100; i++ {
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			r.SetYTClient(nil)
+		}()
+		go func() {
+			defer wg.Done()
+			_ = r.getYTClient()
+		}()
+	}
+	wg.Wait()
 }

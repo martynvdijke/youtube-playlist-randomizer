@@ -57,8 +57,20 @@ Open http://localhost:6270 and authorize with your Google account.
 | `DOCKER` | `false` | Toggles Docker-specific paths and OAuth port behaviour |
 | `PORT` | `6270` | OAuth callback port (used when `DOCKER=true`) |
 | `OAUTH_CALLBACK_URL` | — | Custom OAuth redirect URL. Set to an HTTP address (e.g. `http://localhost:6270/callback`) when the callback server must be reachable from outside the container. The listener binds to `0.0.0.0` so the port must be mapped. |
+| `ADMIN_PASSWORD` | — | Enables the login page for admin and mutating routes. **Set this whenever the app is reachable from another machine.** When unset, those routes only accept loopback clients and requests carrying proxy forwarding headers are denied. |
+| `SESSION_SECRET` | random per start | Key used to sign admin session cookies. Set a long random value to keep sessions valid across restarts. |
+| `COOKIE_SECURE` | `false` | Set to `true` when served over HTTPS so session and CSRF cookies get the `Secure` flag. Also enabled automatically when `OAUTH_CALLBACK_URL` starts with `https://`. |
+| `CORS_ALLOWED_ORIGIN` | — | Single origin allowed to call the API cross-origin. When unset, browsers get no CORS headers (same-origin only). |
+| `SETTINGS_ENCRYPTION_KEY` | — | Encrypts integration secrets (Gotify token) at rest with AES-256-GCM. Without it secrets are stored as plaintext and are still masked in API/HTML responses. Existing plaintext values keep working and are encrypted the next time they are saved. |
 | `OTEL_SERVICE_NAME` | `youtube-playlist-randomizer` | OpenTelemetry service name |
 | `VERSION` | — | Override version reported in telemetry |
+
+### Security
+
+- Admin and state-changing endpoints require a signed `HttpOnly` session cookie obtained from `/login`.
+- OAuth `state` values are random and single-use.
+- The Gotify token is never returned by the API or settings form; leave the token field blank to keep the existing value.
+- The OAuth token file is written with `0600` permissions.
 
 ## Development
 

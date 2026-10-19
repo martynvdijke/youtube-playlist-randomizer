@@ -64,7 +64,7 @@ func (h *Handlers) handleForceResume(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	if h.ytClient == nil {
+	if h.getYTClient() == nil {
 		writeError(w, http.StatusBadRequest, "YouTube API not available")
 		return
 	}
@@ -201,13 +201,14 @@ func (h *Handlers) handleUndo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.ytClient == nil {
+	client := h.getYTClient()
+	if client == nil {
 		writeError(w, http.StatusBadRequest, "YouTube API not available")
 		return
 	}
 
 	// Delete the created playlist from YouTube
-	if err := h.ytClient.DeletePlaylist(r.Context(), j.NewPlaylistID); err != nil {
+	if err := client.DeletePlaylist(r.Context(), j.NewPlaylistID); err != nil {
 		h.logger.Errorc(r.Context(), "failed to delete playlist for undo", "jobId", jobID, "playlistId", j.NewPlaylistID, "error", err.Error())
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to delete playlist: %v", err))
 		return

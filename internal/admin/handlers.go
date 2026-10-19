@@ -492,11 +492,18 @@ type gotifySettings struct {
 	Enabled string `json:"enabled"`
 }
 
+// maskedSecret replaces stored integration tokens in API and HTML responses.
+const maskedSecret = "••••••••"
+
 func (h *Handlers) loadGotifySettings() gotifySettings {
 	url, _ := h.store.GetSetting("gotify_url")
-	token, _ := h.store.GetSetting("gotify_token")
+	token, _ := h.store.GetSecretSetting("gotify_token")
 	enabled, _ := h.store.GetSetting("gotify_enabled")
-	return gotifySettings{URL: url, Token: token, Enabled: enabled}
+	masked := ""
+	if token != "" {
+		masked = maskedSecret
+	}
+	return gotifySettings{URL: url, Token: masked, Enabled: enabled}
 }
 
 // HandleSettingsGotify handles GET/POST for Gotify notification settings.
@@ -530,12 +537,15 @@ func (h *Handlers) HandleSettingsGotify(w http.ResponseWriter, r *http.Request) 
 			fmt.Fprint(w, `{"error":"internal error"}`)
 			return
 		}
-		if err := h.store.SetSetting("gotify_token", token); err != nil {
-			h.logger.Errorc(r.Context(), "Failed to save Gotify token", "error", err.Error())
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusInternalServerError)
-			fmt.Fprint(w, `{"error":"internal error"}`)
-			return
+		// A blank or masked token means "leave the stored token unchanged".
+		if token != "" && token != maskedSecret {
+			if err := h.store.SetSecretSetting("gotify_token", token); err != nil {
+				h.logger.Errorc(r.Context(), "Failed to save Gotify token", "error", err.Error())
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				fmt.Fprint(w, `{"error":"internal error"}`)
+				return
+			}
 		}
 		if err := h.store.SetSetting("gotify_enabled", enabled); err != nil {
 			h.logger.Errorc(r.Context(), "Failed to save Gotify enabled", "error", err.Error())

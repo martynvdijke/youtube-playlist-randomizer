@@ -64,6 +64,7 @@ func (p *Progress) Snapshot() Progress {
 type Runner struct {
 	store        *store.Store
 	logger       *logging.Logger
+	ytMu         sync.RWMutex
 	ytClient     *youtube.Client
 	otel         *telemetry.Telemetry
 	gotifyClient *gotify.Client
@@ -80,12 +81,33 @@ func New(s *store.Store, l *logging.Logger, yt *youtube.Client, ot *telemetry.Te
 	}
 }
 
+// getYTClient returns the current client without racing OAuth re-authentication.
+func (r *Runner) getYTClient() *youtube.Client {
+	r.ytMu.RLock()
+	defer r.ytMu.RUnlock()
+	return r.ytClient
+}
+
+// SetYTClient swaps the client after a successful OAuth re-authentication.
+func (r *Runner) SetYTClient(c *youtube.Client) {
+	r.ytMu.Lock()
+	r.ytClient = c
+	r.ytMu.Unlock()
+}
+
+// quotaAvailable reports whether quota is known and can cover need. A nil
+// quota (database hiccup or legacy caller) is treated as unavailable instead
+// of panicking on a field access.
+func quotaAvailable(quota *store.QuotaInfo, need int) bool {
+	return quota != nil && quota.Remaining >= need
+}
+
 // Run starts a new playlist shuffle job in a background goroutine and
 // returns a Progress object for immediate polling. playlistIDs accepts
 // one or more source playlist IDs whose items are merged and shuffled together.
 func (r *Runner) Run(ctx context.Context, jobID, newName string, playlistIDs ...string) *Progress {
 	jp := &Progress{Status: StatusPending}
-	if r.ytClient == nil {
+	if r.getYTClient() == nil {
 		jp.mu.Lock()
 		jp.Status = StatusError
 		jp.Error = "YouTube API not available"
@@ -172,9 +194,14 @@ func (r *Runner) run(ctx context.Context, jobID, newName string, jp *Progress, p
 	// --- Phase 1: Quota check ---
 	quota, err := r.store.GetQuota()
 	if err != nil {
-		r.logger.Warnc(ctx, fmt.Sprintf("quota check failed for job %s", jobID), "error", err.Error())
+		setError(fmt.Sprintf("Failed to check quota: %v", err))
+		return
 	}
-	if quota == nil || quota.Remaining < store.QuotaListPlaylistItems {
+	if quota == nil {
+		setError("Quota information unavailable")
+		return
+	}
+	if !quotaAvailable(quota, store.QuotaListPlaylistItems) {
 		r.logger.Warnc(ctx, fmt.Sprintf("Insufficient quota to fetch items for job %s (remaining: %d). Job will wait.", jobID, quota.Remaining))
 		updateStatus(StatusPending)
 		r.sendNotification("⏳ Shuffle Queued", fmt.Sprintf("Playlist %q queued — waiting for API quota to become available.", newName))
@@ -186,7 +213,12 @@ func (r *Runner) run(ctx context.Context, jobID, newName string, jp *Progress, p
 
 	var allItems []models.PlayListItem
 	for _, pid := range playlistIDs {
-		items, err := r.ytClient.GetPlaylistItems(ctx, pid)
+		client := r.getYTClient()
+		if client == nil {
+			setError("YouTube API not available")
+			return
+		}
+		items, err := client.GetPlaylistItems(ctx, pid)
 		if err != nil {
 			if youtube.IsQuotaError(err) {
 				r.logger.Warnc(ctx, fmt.Sprintf("Quota error fetching items for job %s. Pausing.", jobID))
@@ -235,7 +267,12 @@ func (r *Runner) run(ctx context.Context, jobID, newName string, jp *Progress, p
 	}
 
 	// --- Phase 4: Create new playlist ---
-	newPlaylistID, err := r.ytClient.CreatePlaylist(ctx, newName)
+	client := r.getYTClient()
+	if client == nil {
+		setError("YouTube API not available")
+		return
+	}
+	newPlaylistID, err := client.CreatePlaylist(ctx, newName)
 	if err != nil {
 		if youtube.IsQuotaError(err) {
 			r.logger.Warnc(ctx, fmt.Sprintf("Quota error creating playlist for job %s. Pausing.", jobID))
@@ -333,7 +370,12 @@ func (r *Runner) resume(ctx context.Context, j store.Job, jp *Progress) {
 	// Create playlist if it doesn't exist yet
 	newPlaylistID := j.NewPlaylistID
 	if newPlaylistID == "" {
-		id, err := r.ytClient.CreatePlaylist(ctx, j.NewName)
+		client := r.getYTClient()
+		if client == nil {
+			setError("YouTube API not available")
+			return
+		}
+		id, err := client.CreatePlaylist(ctx, j.NewName)
 		if err != nil {
 			if youtube.IsQuotaError(err) {
 				r.logger.Warnc(ctx, fmt.Sprintf("Quota error creating playlist during resume for job %s. Pausing.", j.ID))
@@ -407,7 +449,11 @@ func (r *Runner) insertItems(
 			setError(fmt.Sprintf("Failed to check quota: %v", err))
 			return
 		}
-		if quota.Remaining < store.QuotaInsertItem {
+		if quota == nil {
+			setError("Quota information unavailable")
+			return
+		}
+		if !quotaAvailable(quota, store.QuotaInsertItem) {
 			r.logger.Warnc(ctx, fmt.Sprintf("Quota exhausted at %d/%d. Job %s paused.", jp.Done, jp.Total, jobID))
 			updateStatus(StatusPaused)
 			r.store.SetJobPaused(jobID)
@@ -417,7 +463,12 @@ func (r *Runner) insertItems(
 			return
 		}
 
-		if err := r.ytClient.InsertPlaylistItem(ctx, newPlaylistID, item.VideoID, int64(item.Position)); err != nil {
+		client := r.getYTClient()
+		if client == nil {
+			setError("YouTube API not available")
+			return
+		}
+		if err := client.InsertPlaylistItem(ctx, newPlaylistID, item.VideoID, int64(item.Position)); err != nil {
 			if youtube.IsQuotaError(err) {
 				r.logger.Warnc(ctx, fmt.Sprintf("Quota error during insert at %d/%d. Job %s paused.", jp.Done, jp.Total, jobID))
 				updateStatus(StatusPaused)
@@ -485,6 +536,10 @@ func (r *Runner) ResumePending(ctx context.Context) {
 				r.logger.Warnc(ctx, "skipping resume, quota check failed", "error", err.Error())
 				continue
 			}
+			if quota == nil {
+				r.logger.Warnc(ctx, fmt.Sprintf("skipping resume of job %s: quota unavailable", j.ID))
+				continue
+			}
 			remainingItems := j.TotalItems - j.InsertedItems
 			needed := r.store.EstimateQuotaNeeded(remainingItems)
 			if needed > quota.Remaining {
@@ -497,6 +552,10 @@ func (r *Runner) ResumePending(ctx context.Context) {
 			quota, err := r.store.GetQuota()
 			if err != nil {
 				r.logger.Warnc(ctx, "skipping resume, quota check failed", "error", err.Error())
+				continue
+			}
+			if quota == nil {
+				r.logger.Warnc(ctx, fmt.Sprintf("skipping resume of job %s: quota unavailable", j.ID))
 				continue
 			}
 			remainingItems := j.TotalItems - j.InsertedItems
