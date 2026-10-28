@@ -1,4 +1,4 @@
-FROM node:24-alpine AS ts-builder
+FROM node:26-alpine AS ts-builder
 WORKDIR /app
 COPY package.json package-lock.json tsconfig.json ./
 RUN npm ci
