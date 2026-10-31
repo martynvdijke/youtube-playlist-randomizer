@@ -1,3 +1,10 @@
+## [1.16.62](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.16.61...v1.16.62) (2026-10-31)
+
+
+### Bug Fixes
+
+* **deps:** update module modernc.org/sqlite to v1.61.1 ([#112](https://github.com/martynvdijke/youtube-playlist-randomizer/issues/112)) ([4abc010](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/4abc010bbc1d4a438c90c79d2d16556ecc287a4a))
+
 ## [1.16.61](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.16.60...v1.16.61) (2026-10-30)
 
 ## [1.16.60](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.16.59...v1.16.60) (2026-10-29)
