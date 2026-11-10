@@ -1,3 +1,10 @@
+## [1.16.70](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.16.69...v1.16.70) (2026-11-10)
+
+
+### Bug Fixes
+
+* **renovate:** disable platform automerge so Renovate merges green PRs itself ([021bb83](https://github.com/martynvdijke/youtube-playlist-randomizer/commit/021bb83baf0db5dc0cefbdbb938b502551a7a76d))
+
 ## [1.16.69](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.16.68...v1.16.69) (2026-11-09)
 
 
