@@ -18,7 +18,7 @@
   "ignorePresets": [
     ":ignoreModulesAndTests"
   ],
-  "platformAutomerge": false,
+  "platformAutomerge": true,
   "prCreation": "immediate",
   "prHourlyLimit": 10,
   "rebaseWhen": "auto",
