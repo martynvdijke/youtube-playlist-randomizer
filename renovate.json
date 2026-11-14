@@ -21,12 +21,16 @@
   "platformAutomerge": false,
   "prCreation": "immediate",
   "prHourlyLimit": 10,
-  "rebaseWhen": "conflicted",
+  "rebaseWhen": "auto",
   "configMigration": true,
   "timezone": "Europe/Amsterdam",
   "lockFileMaintenance": {
-    "enabled": true
+    "enabled": true,
+    "automerge": true
   },
+  "postUpdateOptions": [
+    "gomodTidy"
+  ],
   "packageRules": [
     {
       "matchCategories": [
