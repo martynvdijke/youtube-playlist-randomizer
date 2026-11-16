@@ -1,3 +1,5 @@
+## [1.16.76](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.16.75...v1.16.76) (2026-11-16)
+
 ## [1.16.75](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.16.74...v1.16.75) (2026-11-14)
 
 ## [1.16.74](https://github.com/martynvdijke/youtube-playlist-randomizer/compare/v1.16.73...v1.16.74) (2026-11-13)
